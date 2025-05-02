@@ -6,7 +6,7 @@ FLAG_BERT_TUNING = False
 FLAG_VICUNA_DATA_ONLY = False
 
 class BasicBertForRegression(nn.Module):
-    def __init__(self, config, model_name='bert-base-uncased', hidden_dim=128):
+    def __init__(self, model_name='bert-base-uncased', hidden_dim=128):
         super(BasicBertForRegression, self).__init__()
         self.bert = BertModel.from_pretrained(model_name)
         
