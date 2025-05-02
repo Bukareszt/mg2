@@ -48,6 +48,4 @@ stages:
       deps:
         - lenght_prediction.py
         - models/BasicBert.py
-        - data/lmsys_vicuna-13b_${item}_100K_train
-        - data/lmsys_vicuna-13b_${item}_100K_val
-        - data/lmsys_vicuna-13b_${item}_100K_test
+
