@@ -189,8 +189,8 @@ def train(args):
                 
                 val_loss += loss.item()
                 
-                all_preds.extend(outputs.cpu().numpy())
-                all_labels.extend(labels.cpu().numpy())
+                all_preds.extend(outputs.view(-1).cpu().numpy())
+                all_labels.extend(labels.view(-1).cpu().numpy())
         
         avg_val_loss = val_loss / len(val_dataloader)
         val_losses.append(avg_val_loss)
@@ -314,8 +314,8 @@ def evaluate(args):
             
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
             
-            all_preds.extend(outputs.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
+            all_preds.extend(outputs.view(-1).cpu().numpy())
+            all_labels.extend(labels.view(-1).cpu().numpy())
     
     metrics = compute_metrics(all_preds, all_labels)
     
