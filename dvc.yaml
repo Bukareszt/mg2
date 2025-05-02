@@ -35,7 +35,7 @@ stages:
         --model_name prajjwal1/bert-tiny
         --output_dir results/bert_length_predictor_${item}
         --num_epochs 40
-        --batch_size 1200
+        --batch_size 300
         --learning_rate 3e-5
         --weight_decay 0.01
         --warmup_ratio 0.1
