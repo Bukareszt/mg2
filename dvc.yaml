@@ -11,8 +11,8 @@ stages:
   generate_phi_responses:
     cmd: >
       python generate_phi_responses.py
-      --data_size 100
-      --batch_size 64
+      --data_size 50
+      --batch_size 128
       --seed 42
       --output_dir ./data
       --max_length 512
