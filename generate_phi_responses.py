@@ -29,7 +29,13 @@ def generate_pythia_response(user_question, model, tokenizer, max_length=512, de
     prompt = f"[USER]: {user_question}\n[ASSISTANT]:"
 
     # Tokenize and move to device
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+    inputs = tokenizer(prompt, return_tensors="pt")
+    
+    # Check if input is too long for max_length
+    if inputs['input_ids'].shape[1] >= max_length:
+        return ""  # Return empty string for inputs that are too long
+    
+    inputs = inputs.to(device)
 
     with torch.no_grad():
         outputs = model.generate(
@@ -66,13 +72,19 @@ def process_dataset_with_pythia(dataset, model, tokenizer, batch_size=32, max_sa
     
     # Generate responses with pythia model
     pythia_responses = []
+    valid_indices = []
+    
     for i in tqdm.tqdm(range(0, len(user_questions), batch_size), desc="Generating pythia responses"):
         batch = user_questions[i:i+batch_size]
         batch_responses = []
         
-        for question in batch:
+        for j, question in enumerate(batch):
             response = generate_pythia_response(question, model, tokenizer, device=device)
             batch_responses.append(response)
+            
+            # Track valid responses (non-empty)
+            if response:
+                valid_indices.append(i + j)
         
         pythia_responses.extend(batch_responses)
         
@@ -81,10 +93,16 @@ def process_dataset_with_pythia(dataset, model, tokenizer, batch_size=32, max_sa
             torch.cuda.empty_cache()
             gc.collect()
     
+    # Filter to keep only valid examples (where we got a response)
+    filtered_questions = [user_questions[i] for i in valid_indices]
+    filtered_responses = [pythia_responses[i] for i in valid_indices]
+    
+    print(f"Filtered out {len(user_questions) - len(filtered_questions)} examples with inputs too long")
+    
     # Create a new dataset with user questions and pythia responses
     new_data = {
-        "user_question": user_questions,
-        "pythia_response": pythia_responses
+        "user_question": filtered_questions,
+        "pythia_response": filtered_responses
     }
     
     return Dataset.from_dict(new_data)

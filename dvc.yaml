@@ -12,7 +12,7 @@ stages:
     cmd: >
       python generate_phi_responses.py
       --data_size 100
-      --batch_size 32
+      --batch_size 64
       --seed 42
       --output_dir ./data
       --max_length 512
