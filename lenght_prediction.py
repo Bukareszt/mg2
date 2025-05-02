@@ -258,31 +258,37 @@ def train(args):
         
         # Handle early stopping and model saving
         if avg_val_loss < best_val_loss:
-            logger.info(f"Validation loss decreased from {best_val_loss:.4f} to {avg_val_loss:.4f}")
-            best_val_loss = avg_val_loss
-            early_stop_counter = 0  # Reset counter when validation loss improves
-            
-            # Save the best model
-            if not os.path.exists(args.output_dir):
-                os.makedirs(args.output_dir)
-            
-            model_path = os.path.join(args.output_dir, "best_model.pt")
-            logger.info(f"Saving best model to {model_path}")
-            
-            torch.save({
-                'epoch': epoch + 1,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'val_loss': best_val_loss,
-                'metrics': metrics
-            }, model_path)
-            
-            # Log model checkpoint to wandb
-            wandb_logger.log_model_checkpoint(
-                model=model, 
-                path=model_path, 
-                name=f"best_model_epoch_{epoch+1}"
-            )
+            improvement = best_val_loss - avg_val_loss
+            if improvement >= args.min_loss_improvement:
+                logger.info(f"Validation loss decreased from {best_val_loss:.4f} to {avg_val_loss:.4f} (improvement: {improvement:.4f})")
+                best_val_loss = avg_val_loss
+                early_stop_counter = 0  # Reset counter when validation loss improves significantly
+                
+                # Save the best model
+                if not os.path.exists(args.output_dir):
+                    os.makedirs(args.output_dir)
+                
+                model_path = os.path.join(args.output_dir, "best_model.pt")
+                logger.info(f"Saving best model to {model_path}")
+                
+                torch.save({
+                    'epoch': epoch + 1,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'val_loss': best_val_loss,
+                    'metrics': metrics
+                }, model_path)
+                
+                # Log model checkpoint to wandb
+                wandb_logger.log_model_checkpoint(
+                    model=model, 
+                    path=model_path, 
+                    name=f"best_model_epoch_{epoch+1}"
+                )
+            else:
+                logger.info(f"Validation loss decreased from {best_val_loss:.4f} to {avg_val_loss:.4f}, but improvement ({improvement:.4f}) below threshold ({args.min_loss_improvement:.4f})")
+                early_stop_counter += 1
+                logger.info(f"Early stopping counter: {early_stop_counter}/{early_stop_patience}")
         else:
             # Increment early stopping counter when validation loss doesn't improve
             early_stop_counter += 1
@@ -442,6 +448,10 @@ def main():
                        help="Number of worker processes for data loading")
     parser.add_argument("--prefetch_factor", type=int, default=2,
                        help="Number of batches loaded in advance by each worker")
+    
+    # Add minimal loss improvement threshold argument
+    parser.add_argument("--min_loss_improvement", type=float, default=1,
+                       help="Minimum validation loss improvement to consider as significant")
     
     args = parser.parse_args()
     
