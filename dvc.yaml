@@ -8,6 +8,17 @@ stages:
     deps:
       - process_dataset.py
 
+  generate_phi_responses:
+    cmd: >
+      python generate_phi_responses.py
+      --data_size 100
+      --batch_size 16
+      --seed 42
+      --output_dir ./data
+      --max_length 512
+    deps:
+      - generate_phi_responses.py
+
   train_length_predictors:
     foreach:
       - normal
@@ -24,7 +35,7 @@ stages:
         --model_name bert-base-uncased
         --output_dir results/bert_length_predictor_${item}
         --num_epochs 20
-        --batch_size 64
+        --batch_size 16
         --learning_rate 3e-5
         --weight_decay 0.01
         --warmup_ratio 0.1
