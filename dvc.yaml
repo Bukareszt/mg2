@@ -2,7 +2,7 @@ stages:
   preprocess:
     cmd: >
       python process_dataset.py 
-      --data_size 100
+      --data_size 200
       --seed 42
       --response_tokens_list 0,5,10,20,30,40,50
     deps:
@@ -11,7 +11,7 @@ stages:
   generate_phi_responses:
     cmd: >
       python generate_phi_responses.py
-      --data_size 50
+      --data_size 10
       --batch_size 128
       --seed 42
       --output_dir ./data
@@ -31,8 +31,8 @@ stages:
     do:
       cmd: >
         python lenght_prediction.py
-        --data_dir data/lmsys_vicuna-13b_${item}_100K
-        --model_name bert-base-uncased
+        --data_dir data/lmsys_vicuna-13b_${item}_200K
+        --model_name prajjwal1/bert-tiny
         --output_dir results/bert_length_predictor_${item}
         --num_epochs 12
         --batch_size 32
