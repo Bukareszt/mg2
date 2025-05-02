@@ -1,0 +1,9 @@
+ stages:
+   preprocess:
+    cmd: >
+      python process_dataset.py 
+      --data_size 100
+      --seed 42
+      --response_tokens_list 0,5,10,20,30,40,50
+    deps:
+      - process_dataset.py
