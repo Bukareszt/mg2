@@ -21,7 +21,6 @@ stages:
 
   train_length_predictors:
     foreach:
-      - preview5
       - preview10
       - preview20
       - preview30
@@ -33,12 +32,12 @@ stages:
         --data_dir data/lmsys_vicuna-13b_${item}_100K
         --model_name bert-base-uncased
         --output_dir results/bert_length_predictor_${item}
-        --num_epochs 20
+        --num_epochs 12
         --batch_size 12
         --learning_rate 3e-5
         --weight_decay 0.01
         --warmup_ratio 0.1
-        --early_stopping_patience 5
+        --early_stopping_patience 2
         --seed 42
         --use_wandb
         --wandb_project output-length-prediction
