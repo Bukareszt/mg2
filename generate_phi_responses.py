@@ -24,8 +24,8 @@ def extract_user_questions(example):
     return user_content
 
 
-def generate_phi_response(user_question, model, tokenizer, max_length=512, device="cuda"):
-    """Generate a response using the Phi-1.5 model."""
+def generate_pythia_response(user_question, model, tokenizer, max_length=512, device="cuda"):
+    """Generate a response using the Pythia model."""
     prompt = f"[USER]: {user_question}\n[ASSISTANT]:"
 
     # Tokenize and move to device
@@ -50,8 +50,8 @@ def generate_phi_response(user_question, model, tokenizer, max_length=512, devic
     return assistant_response
 
 
-def process_dataset_with_phi(dataset, model, tokenizer, batch_size=32, max_samples=None):
-    """Process dataset examples with phi-1.5 model and return a new dataset with responses."""
+def process_dataset_with_pythia(dataset, model, tokenizer, batch_size=32, max_samples=None):
+    """Process dataset examples with Pythia model and return a new dataset with responses."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = model.to(device)
     
@@ -64,27 +64,27 @@ def process_dataset_with_phi(dataset, model, tokenizer, batch_size=32, max_sampl
     if max_samples is not None:
         user_questions = user_questions[:max_samples]
     
-    # Generate responses with phi model
-    phi_responses = []
-    for i in tqdm.tqdm(range(0, len(user_questions), batch_size), desc="Generating phi responses"):
+    # Generate responses with pythia model
+    pythia_responses = []
+    for i in tqdm.tqdm(range(0, len(user_questions), batch_size), desc="Generating pythia responses"):
         batch = user_questions[i:i+batch_size]
         batch_responses = []
         
         for question in batch:
-            response = generate_phi_response(question, model, tokenizer, device=device)
+            response = generate_pythia_response(question, model, tokenizer, device=device)
             batch_responses.append(response)
         
-        phi_responses.extend(batch_responses)
+        pythia_responses.extend(batch_responses)
         
         # Optional: Clear CUDA cache to avoid OOM
         if device == "cuda":
             torch.cuda.empty_cache()
             gc.collect()
     
-    # Create a new dataset with user questions and phi responses
+    # Create a new dataset with user questions and pythia responses
     new_data = {
         "user_question": user_questions,
-        "phi_response": phi_responses
+        "pythia_response": pythia_responses
     }
     
     return Dataset.from_dict(new_data)
@@ -97,6 +97,8 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     parser.add_argument('--output_dir', type=str, default='./data', help='Directory to save the dataset')
     parser.add_argument('--max_length', type=int, default=512, help='Maximum length of generated responses')
+    parser.add_argument('--model_revision', type=str, default='step143000', help='Revision/checkpoint of the model to use')
+    parser.add_argument('--cache_dir', type=str, default='./pythia-1b', help='Cache directory for model files')
     args = parser.parse_args()
 
     # Set random seeds
@@ -106,11 +108,20 @@ if __name__ == '__main__':
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
 
-    # Load phi-1.5 model and tokenizer
-    model_name = "microsoft/phi-1_5"
+    # Load Pythia 1B model and tokenizer
+    model_name = "EleutherAI/pythia-1b"
     print(f"Loading {model_name} model and tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(model_name,  torch_dtype=torch.float32 , trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name, 
+        revision=args.model_revision,
+        cache_dir=f"{args.cache_dir}/{args.model_revision}"
+    )
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        revision=args.model_revision,
+        torch_dtype=torch.float32,
+        cache_dir=f"{args.cache_dir}/{args.model_revision}"
+    )
 
     # Load the dataset
     dataset_name = 'lmsys/lmsys-chat-1m'
@@ -138,29 +149,29 @@ if __name__ == '__main__':
     # Create directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Process each split with phi-1.5
+    # Process each split with pythia
     print("Processing training data...")
-    train_phi_dataset = process_dataset_with_phi(train_raw, model, tokenizer, 
+    train_pythia_dataset = process_dataset_with_pythia(train_raw, model, tokenizer, 
                                                 batch_size=args.batch_size, 
                                                 max_samples=len(train_raw))
     
     print("Processing validation data...")
-    val_phi_dataset = process_dataset_with_phi(val_raw, model, tokenizer, 
+    val_pythia_dataset = process_dataset_with_pythia(val_raw, model, tokenizer, 
                                               batch_size=args.batch_size,
                                               max_samples=len(val_raw))
     
     print("Processing test data...")
-    test_phi_dataset = process_dataset_with_phi(test_raw, model, tokenizer, 
+    test_pythia_dataset = process_dataset_with_pythia(test_raw, model, tokenizer, 
                                                batch_size=args.batch_size,
                                                max_samples=len(test_raw))
 
     # Create paths for saving
-    base_path = f"{args.output_dir}/lmsys_phi-1-5_{int(selected_data_size / 1000)}K"
+    base_path = f"{args.output_dir}/lmsys_pythia-1b_{int(selected_data_size / 1000)}K"
 
     # Save the datasets to disk
-    train_phi_dataset.save_to_disk(f"{base_path}_train")
-    val_phi_dataset.save_to_disk(f"{base_path}_val")
-    test_phi_dataset.save_to_disk(f"{base_path}_test")
+    train_pythia_dataset.save_to_disk(f"{base_path}_train")
+    val_pythia_dataset.save_to_disk(f"{base_path}_val")
+    test_pythia_dataset.save_to_disk(f"{base_path}_test")
 
     print(f'Saved train dataset to {base_path}_train')
     print(f'Saved validation dataset to {base_path}_val')

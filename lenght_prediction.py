@@ -110,6 +110,7 @@ def train(args):
     config = vars(args)
     # Add dataset info to config for better tracking in wandb
     config['dataset_info'] = dataset_info
+    config['loss_type'] = "L1Loss"  # Always use L1Loss
     
     wandb_logger = Logger(
         config=config,
@@ -166,8 +167,8 @@ def train(args):
     
     lr_scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
     
-    # Loss function
-    criterion = nn.MSELoss()
+    # Use L1 loss only
+    criterion = nn.L1Loss()
     
     # Training loop
     best_val_loss = float('inf')
@@ -232,19 +233,20 @@ def train(args):
         
         # Compute metrics
         metrics = compute_metrics(all_preds, all_labels)
+        metrics['l1_loss'] = avg_val_loss  # Add L1 loss to metrics
         
         # Log metrics to console
         logger.info(f"Epoch {epoch+1}/{args.num_epochs}:")
-        logger.info(f"  Train Loss: {avg_train_loss:.4f}")
-        logger.info(f"  Val Loss: {avg_val_loss:.4f}")
+        logger.info(f"  Train Loss (L1): {avg_train_loss:.4f}")
+        logger.info(f"  Val Loss (L1): {avg_val_loss:.4f}")
         logger.info(f"  MAE: {metrics['mae']:.4f}")
         logger.info(f"  RMSE: {metrics['rmse']:.4f}")
         logger.info(f"  R²: {metrics['r2']:.4f}")
         
         # Log metrics to wandb
         wandb_metrics = {
-            "train/loss": avg_train_loss,
-            "val/loss": avg_val_loss,
+            "train/l1_loss": avg_train_loss,
+            "val/l1_loss": avg_val_loss,
             "val/mae": metrics['mae'],
             "val/rmse": metrics['rmse'],
             "val/r2": metrics['r2'],
@@ -309,6 +311,7 @@ def evaluate(args):
         config['mode'] = 'evaluation'
         # Add dataset info to config for better tracking in wandb
         config['dataset_info'] = dataset_info
+        config['loss_type'] = "L1Loss"  # Always use L1Loss
         
         wandb_logger = Logger(
             config=config,
@@ -345,6 +348,10 @@ def evaluate(args):
     all_preds = []
     all_labels = []
     
+    # Also calculate L1 loss explicitly
+    criterion = nn.L1Loss()
+    l1_loss = 0.0
+    
     with torch.no_grad():
         for batch in tqdm(test_dataloader, desc="Testing"):
             input_ids = batch['input_ids'].to(device)
@@ -353,12 +360,19 @@ def evaluate(args):
             
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
             
+            # Calculate L1 loss
+            batch_loss = criterion(outputs, labels).item()
+            l1_loss += batch_loss
+            
             all_preds.extend(outputs.view(-1).cpu().numpy())
             all_labels.extend(labels.view(-1).cpu().numpy())
     
     metrics = compute_metrics(all_preds, all_labels)
+    avg_l1_loss = l1_loss / len(test_dataloader)
+    metrics['l1_loss'] = avg_l1_loss
     
     logger.info("Test Metrics:")
+    logger.info(f"  L1 Loss: {avg_l1_loss:.4f}")
     logger.info(f"  MAE: {metrics['mae']:.4f}")
     logger.info(f"  RMSE: {metrics['rmse']:.4f}")
     logger.info(f"  R²: {metrics['r2']:.4f}")
@@ -366,6 +380,7 @@ def evaluate(args):
     # Log test metrics to wandb
     if args.use_wandb:
         test_metrics = {
+            "test/l1_loss": avg_l1_loss,
             "test/mae": metrics['mae'],
             "test/mse": metrics['mse'],
             "test/rmse": metrics['rmse'],
@@ -429,6 +444,10 @@ def main():
                        help="Number of batches loaded in advance by each worker")
     
     args = parser.parse_args()
+    
+    # Update the config with the loss type
+    config = vars(args)
+    config['loss_type'] = "L1Loss"  # Always use L1Loss
     
     if args.do_train:
         train(args)

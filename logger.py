@@ -23,6 +23,11 @@ class Logger:
         self.enable_logging = enable_logging
         self.log_model = log_model
         
+        # Add loss type to config
+        if 'loss_type' not in config:
+            # Default to L1Loss since we've changed it in the main script
+            config['loss_type'] = 'L1Loss'
+        
         if not enable_logging:
             self.run = None
             return
