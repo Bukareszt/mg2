@@ -72,6 +72,33 @@ def extract_dataset_info(data_dir):
     # If no preview found, return "normal"
     return "normal"
 
+def custom_collate_fn(batch):
+    """
+    Custom collate function to handle varying tensor sizes in the dataset.
+    """
+    # Sort batch by label length (descending order)
+    batch_by_keys = {
+        key: [d[key] for d in batch] for key in batch[0].keys()
+    }
+    
+    # For labels, we need to ensure they're all the same shape
+    if 'labels' in batch_by_keys:
+        # Convert to list if it's a tensor
+        labels = [label.item() if isinstance(label, torch.Tensor) and label.numel() == 1 
+                  else label for label in batch_by_keys['labels']]
+        batch_by_keys['labels'] = torch.tensor(labels, dtype=torch.float)
+    
+    # Let PyTorch handle the padding for input_ids and attention_mask
+    if 'input_ids' in batch_by_keys:
+        batch_by_keys['input_ids'] = torch.nn.utils.rnn.pad_sequence(
+            batch_by_keys['input_ids'], batch_first=True, padding_value=0)
+    
+    if 'attention_mask' in batch_by_keys:
+        batch_by_keys['attention_mask'] = torch.nn.utils.rnn.pad_sequence(
+            batch_by_keys['attention_mask'], batch_first=True, padding_value=0)
+    
+    return batch_by_keys
+
 def train(args):
     """Training function."""
     set_seed(args.seed)
@@ -102,12 +129,14 @@ def train(args):
         train_dataset, 
         batch_size=args.batch_size, 
         shuffle=True,
-        pin_memory=True
+        pin_memory=True,
+        collate_fn=custom_collate_fn
     )
     val_dataloader = DataLoader(
         val_dataset, 
         batch_size=args.batch_size,
-        pin_memory=True
+        pin_memory=True,
+        collate_fn=custom_collate_fn
     )
     
     # Initialize model
@@ -290,7 +319,8 @@ def evaluate(args):
     test_dataloader = DataLoader(
         test_dataset, 
         batch_size=args.batch_size,
-        pin_memory=True
+        pin_memory=True,
+        collate_fn=custom_collate_fn
     )
     
     # Load the best model
