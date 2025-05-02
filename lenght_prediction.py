@@ -289,6 +289,11 @@ def train(args):
                 logger.info(f"Validation loss decreased from {best_val_loss:.4f} to {avg_val_loss:.4f}, but improvement ({improvement:.4f}) below threshold ({args.min_loss_improvement:.4f})")
                 early_stop_counter += 1
                 logger.info(f"Early stopping counter: {early_stop_counter}/{early_stop_patience}")
+                
+                # Add check for early stopping here
+                if early_stop_counter >= early_stop_patience:
+                    logger.info(f"Early stopping triggered after {early_stop_counter} epochs without significant improvement")
+                    break
         else:
             # Increment early stopping counter when validation loss doesn't improve
             early_stop_counter += 1
