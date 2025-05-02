@@ -35,7 +35,7 @@ stages:
         --model_name google-bert/bert-base-uncased
         --output_dir results/bert_length_predictor_${item}
         --num_epochs 40
-        --batch_size 36
+        --batch_size 50
         --learning_rate 1e-5
         --weight_decay 0.01
         --warmup_ratio 0.1
