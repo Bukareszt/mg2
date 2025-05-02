@@ -21,6 +21,8 @@ stages:
 
   train_length_predictors:
     foreach:
+      - normal
+      - preview5
       - preview10
       - preview20
       - preview30
