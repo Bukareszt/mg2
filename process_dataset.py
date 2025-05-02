@@ -202,9 +202,9 @@ if __name__ == '__main__':
         train_dataset = preprocess_dataset(train_raw, add_response_tokens=token_count)
         train_dataset.set_format("torch")
 
-        # Process validation data with 0 response tokens
-        print("Processing validation data with 0 response tokens...")
-        val_dataset = preprocess_dataset(val_raw, add_response_tokens=0)
+        # Process validation data with the same response tokens as training
+        print(f"Processing validation data with {token_count} response tokens...")
+        val_dataset = preprocess_dataset(val_raw, add_response_tokens=token_count)
         val_dataset.set_format("torch")
 
         # Process test data with requested token count (same as training)
