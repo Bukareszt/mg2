@@ -1,0 +1,395 @@
+import os
+import argparse
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from datasets import load_from_disk
+from transformers import get_linear_schedule_with_warmup
+from models.BasicBert import BasicBertForRegression
+import logging
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from logger import Logger
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler("training.log"), logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
+
+def set_seed(seed):
+    """Set seeds for reproducibility."""
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    
+def get_model(args):
+    """Initialize model based on arguments."""
+    return BasicBertForRegression(model_name=args.model_name)
+
+def compute_metrics(preds, labels):
+    """Compute regression metrics."""
+    mae = mean_absolute_error(labels, preds)
+    mse = mean_squared_error(labels, preds)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(labels, preds)
+    return {
+        "mae": mae,
+        "mse": mse,
+        "rmse": rmse,
+        "r2": r2
+    }
+
+def extract_dataset_info(data_dir):
+    """
+    Extract dataset name and configuration from data directory path.
+    If the name contains 'preview' (like preview5/preview10), extract that info.
+    Otherwise, label it as 'normal'.
+    """
+    # Extract the base name without the path and suffixes
+    base_name = os.path.basename(data_dir)
+    
+    # Handle different path formats
+    if '/' in data_dir:
+        parts = data_dir.split('/')
+        if len(parts) >= 2:
+            base_name = parts[-1]  # Get the last part of the path
+    
+    # Check if "preview" is in the name and extract that info
+    if "preview" in base_name:
+        # Find the preview pattern (preview followed by numbers)
+        import re
+        preview_match = re.search(r'preview(\d+)', base_name)
+        if preview_match:
+            preview_count = preview_match.group(1)
+            return f"preview{preview_count}"
+    
+    # If no preview found, return "normal"
+    return "normal"
+
+def train(args):
+    """Training function."""
+    set_seed(args.seed)
+    
+    # Extract dataset info from data directory path
+    dataset_info = extract_dataset_info(args.data_dir)
+    
+    # Initialize wandb logger with model name that includes dataset info
+    config = vars(args)
+    # Add dataset info to config for better tracking in wandb
+    config['dataset_info'] = dataset_info
+    
+    wandb_logger = Logger(
+        config=config,
+        model_name=f"bert-length-predictor-{args.model_name.split('/')[-1]}-{dataset_info}",
+        project_name=args.wandb_project,
+        enable_logging=args.use_wandb,
+        log_model=args.log_model
+    )
+    
+    # Load datasets
+    logger.info(f"Loading datasets from {args.data_dir}")
+    train_dataset = load_from_disk(f"{args.data_dir}_train")
+    val_dataset = load_from_disk(f"{args.data_dir}_val")
+    
+    # Create data loaders
+    train_dataloader = DataLoader(
+        train_dataset, 
+        batch_size=args.batch_size, 
+        shuffle=True,
+        pin_memory=True
+    )
+    val_dataloader = DataLoader(
+        val_dataset, 
+        batch_size=args.batch_size,
+        pin_memory=True
+    )
+    
+    # Initialize model
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Using device: {device}")
+    
+    model = get_model(args)
+    model.to(device)
+    
+    # Define optimizer and scheduler
+    optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    
+    total_steps = len(train_dataloader) * args.num_epochs
+    warmup_steps = int(total_steps * args.warmup_ratio)
+    
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, 
+        num_warmup_steps=warmup_steps, 
+        num_training_steps=total_steps
+    )
+    
+    lr_scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+    
+    # Loss function
+    criterion = nn.MSELoss()
+    
+    # Training loop
+    best_val_loss = float('inf')
+    train_losses = []
+    val_losses = []
+    
+    # Early stopping variables
+    early_stop_counter = 0
+    early_stop_patience = args.early_stopping_patience
+    
+    logger.info("Starting training...")
+    for epoch in range(args.num_epochs):
+        # Training
+        model.train()
+        epoch_loss = 0
+        progress_bar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{args.num_epochs}")
+        
+        for batch in progress_bar:
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].float().to(device)
+            
+            optimizer.zero_grad()
+            
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            loss = criterion(outputs, labels)
+            
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+            
+            optimizer.step()
+            scheduler.step()
+            
+            epoch_loss += loss.item()
+            progress_bar.set_postfix({"training_loss": f"{loss.item():.4f}"})
+        
+        avg_train_loss = epoch_loss / len(train_dataloader)
+        train_losses.append(avg_train_loss)
+        
+        # Validation
+        model.eval()
+        val_loss = 0
+        all_preds = []
+        all_labels = []
+        
+        with torch.no_grad():
+            for batch in tqdm(val_dataloader, desc="Validation"):
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].float().to(device)
+                
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                loss = criterion(outputs, labels)
+                
+                val_loss += loss.item()
+                
+                all_preds.extend(outputs.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+        
+        avg_val_loss = val_loss / len(val_dataloader)
+        val_losses.append(avg_val_loss)
+        
+        # Compute metrics
+        metrics = compute_metrics(all_preds, all_labels)
+        
+        # Log metrics to console
+        logger.info(f"Epoch {epoch+1}/{args.num_epochs}:")
+        logger.info(f"  Train Loss: {avg_train_loss:.4f}")
+        logger.info(f"  Val Loss: {avg_val_loss:.4f}")
+        logger.info(f"  MAE: {metrics['mae']:.4f}")
+        logger.info(f"  RMSE: {metrics['rmse']:.4f}")
+        logger.info(f"  R²: {metrics['r2']:.4f}")
+        
+        # Log metrics to wandb
+        wandb_metrics = {
+            "train/loss": avg_train_loss,
+            "val/loss": avg_val_loss,
+            "val/mae": metrics['mae'],
+            "val/rmse": metrics['rmse'],
+            "val/r2": metrics['r2'],
+            "lr": optimizer.param_groups[0]['lr']
+        }
+        wandb_logger.log_metrics(wandb_metrics, step=epoch)
+        
+        lr_scheduler.step(avg_val_loss)
+        
+        # Handle early stopping and model saving
+        if avg_val_loss < best_val_loss:
+            logger.info(f"Validation loss decreased from {best_val_loss:.4f} to {avg_val_loss:.4f}")
+            best_val_loss = avg_val_loss
+            early_stop_counter = 0  # Reset counter when validation loss improves
+            
+            # Save the best model
+            if not os.path.exists(args.output_dir):
+                os.makedirs(args.output_dir)
+            
+            model_path = os.path.join(args.output_dir, "best_model.pt")
+            logger.info(f"Saving best model to {model_path}")
+            
+            torch.save({
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'val_loss': best_val_loss,
+                'metrics': metrics
+            }, model_path)
+            
+            # Log model checkpoint to wandb
+            wandb_logger.log_model_checkpoint(
+                model=model, 
+                path=model_path, 
+                name=f"best_model_epoch_{epoch+1}"
+            )
+        else:
+            # Increment early stopping counter when validation loss doesn't improve
+            early_stop_counter += 1
+            logger.info(f"No improvement in validation loss. Early stopping counter: {early_stop_counter}/{early_stop_patience}")
+            
+            # Check if we should stop training
+            if early_stop_counter >= early_stop_patience:
+                logger.info(f"Early stopping triggered after {early_stop_counter} epochs without improvement")
+                break
+    
+    # Finish wandb logging
+    wandb_logger.finish()
+    
+    return model, best_val_loss, metrics
+
+def evaluate(args):
+    """Evaluation function."""
+    set_seed(args.seed)
+    
+    # Extract dataset info from data directory path
+    dataset_info = extract_dataset_info(args.data_dir)
+    
+    # Initialize wandb logger for test evaluation if requested
+    if args.use_wandb:
+        config = vars(args)
+        config['mode'] = 'evaluation'
+        # Add dataset info to config for better tracking in wandb
+        config['dataset_info'] = dataset_info
+        
+        wandb_logger = Logger(
+            config=config,
+            model_name=f"bert-length-predictor-eval-{args.model_name.split('/')[-1]}-{dataset_info}",
+            project_name=args.wandb_project,
+            enable_logging=args.use_wandb,
+            log_model=False
+        )
+    
+    # Load test dataset
+    logger.info(f"Loading test dataset from {args.data_dir}_test")
+    test_dataset = load_from_disk(f"{args.data_dir}_test")
+    
+    test_dataloader = DataLoader(
+        test_dataset, 
+        batch_size=args.batch_size,
+        pin_memory=True
+    )
+    
+    # Load the best model
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = get_model(args)
+    
+    checkpoint = torch.load(os.path.join(args.output_dir, "best_model.pt"), map_location=device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.to(device)
+    model.eval()
+    
+    # Evaluation
+    all_preds = []
+    all_labels = []
+    
+    with torch.no_grad():
+        for batch in tqdm(test_dataloader, desc="Testing"):
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].float().to(device)
+            
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            
+            all_preds.extend(outputs.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+    
+    metrics = compute_metrics(all_preds, all_labels)
+    
+    logger.info("Test Metrics:")
+    logger.info(f"  MAE: {metrics['mae']:.4f}")
+    logger.info(f"  RMSE: {metrics['rmse']:.4f}")
+    logger.info(f"  R²: {metrics['r2']:.4f}")
+    
+    # Log test metrics to wandb
+    if args.use_wandb:
+        test_metrics = {
+            "test/mae": metrics['mae'],
+            "test/mse": metrics['mse'],
+            "test/rmse": metrics['rmse'],
+            "test/r2": metrics['r2']
+        }
+        wandb_logger.log_metrics(test_metrics)
+    
+    return metrics
+
+def main():
+    parser = argparse.ArgumentParser()
+    
+    # Data arguments
+    parser.add_argument("--data_dir", type=str, required=True, 
+                        help="Path to the processed dataset (without _train, _val, _test suffix)")
+    
+    # Model arguments
+    parser.add_argument("--model_name", type=str, default="bert-base-uncased",
+                       help="BERT model name to use")
+    
+    # Training arguments
+    parser.add_argument("--output_dir", type=str, default="./results",
+                       help="Directory to save model and results")
+    parser.add_argument("--num_epochs", type=int, default=10,
+                       help="Number of training epochs")
+    parser.add_argument("--batch_size", type=int, default=16,
+                       help="Batch size for training and evaluation")
+    parser.add_argument("--learning_rate", type=float, default=2e-5,
+                       help="Learning rate for optimizer")
+    parser.add_argument("--weight_decay", type=float, default=0.01,
+                       help="Weight decay for regularization")
+    parser.add_argument("--warmup_ratio", type=float, default=0.1,
+                       help="Ratio of warmup steps for learning rate scheduler")
+    parser.add_argument("--max_grad_norm", type=float, default=1.0,
+                       help="Maximum gradient norm for gradient clipping")
+    parser.add_argument("--early_stopping_patience", type=int, default=5,
+                       help="Number of epochs with no improvement after which training will be stopped")
+    parser.add_argument("--seed", type=int, default=42,
+                       help="Random seed for reproducibility")
+    
+    # Wandb logging arguments
+    parser.add_argument("--use_wandb", action="store_true",
+                       help="Whether to use Weights & Biases for logging")
+    parser.add_argument("--wandb_project", type=str, default="output-length-prediction",
+                       help="Weights & Biases project name")
+    parser.add_argument("--log_model", action="store_true",
+                       help="Whether to log model checkpoints to W&B")
+    parser.add_argument("--plot_every", type=int, default=1,
+                       help="Plot predictions every N epochs")
+    
+    # Mode arguments
+    parser.add_argument("--do_train", action="store_true",
+                       help="Whether to run training")
+    parser.add_argument("--do_eval", action="store_true",
+                       help="Whether to run evaluation on test set")
+    
+    args = parser.parse_args()
+    
+    if args.do_train:
+        train(args)
+    
+    if args.do_eval:
+        evaluate(args)
+
+if __name__ == "__main__":
+    main()

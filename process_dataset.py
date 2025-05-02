@@ -121,7 +121,7 @@ def preprocess_dataset(dataset, add_response_tokens=None):
         dataset = dataset.map(extract_first_round_prompt, remove_columns=['conversation'])
 
     print('Num samples before filtering: ', len(dataset))
-    dataset = dataset.filter(lambda example: example["labels"] > 1 and example["labels"] < 512)
+    dataset = dataset.filter(lambda example: example["labels"] > 1 and example["labels"] <= 512)
     print('Num samples after filtering: ', len(dataset))
 
     dataset = dataset.map(tokenize_function, batched=False, remove_columns=['prompt'])

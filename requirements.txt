@@ -13,6 +13,6 @@ transformers==4.40.0
 sentencepiece==0.2.0
 protobuf==5.26.1
 tensorboard==2.16.2
-weave
+wandb
 dvc
 dvc[s3]

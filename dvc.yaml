@@ -1,5 +1,5 @@
- stages:
-   preprocess:
+stages:
+  preprocess:
     cmd: >
       python process_dataset.py 
       --data_size 100
@@ -7,3 +7,36 @@
       --response_tokens_list 0,5,10,20,30,40,50
     deps:
       - process_dataset.py
+
+  train_length_predictors:
+    foreach:
+      - normal
+      - preview5
+      - preview10
+      - preview20
+      - preview30
+      - preview40
+      - preview50
+    do:
+      cmd: >
+        python lenght_prediction.py
+        --data_dir data/lmsys_vicuna-13b_${item}_100K
+        --model_name bert-base-uncased
+        --output_dir results/bert_length_predictor_${item}
+        --num_epochs 20
+        --batch_size 64
+        --learning_rate 3e-5
+        --weight_decay 0.01
+        --warmup_ratio 0.1
+        --early_stopping_patience 5
+        --seed 42
+        --use_wandb
+        --wandb_project output-length-prediction
+        --do_train
+        --do_eval
+      deps:
+        - lenght_prediction.py
+        - models/BasicBert.py
+        - data/lmsys_vicuna-13b_${item}_100K_train
+        - data/lmsys_vicuna-13b_${item}_100K_val
+        - data/lmsys_vicuna-13b_${item}_100K_test
