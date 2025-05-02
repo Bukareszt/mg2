@@ -130,12 +130,18 @@ def train(args):
         batch_size=args.batch_size, 
         shuffle=True,
         pin_memory=True,
+        num_workers=args.num_workers,
+        prefetch_factor=args.prefetch_factor,
+        persistent_workers=True if args.num_workers > 0 else False,
         collate_fn=custom_collate_fn
     )
     val_dataloader = DataLoader(
         val_dataset, 
         batch_size=args.batch_size,
         pin_memory=True,
+        num_workers=args.num_workers,
+        prefetch_factor=args.prefetch_factor,
+        persistent_workers=True if args.num_workers > 0 else False,
         collate_fn=custom_collate_fn
     )
     
@@ -320,6 +326,9 @@ def evaluate(args):
         test_dataset, 
         batch_size=args.batch_size,
         pin_memory=True,
+        num_workers=args.num_workers,
+        prefetch_factor=args.prefetch_factor,
+        persistent_workers=True if args.num_workers > 0 else False,
         collate_fn=custom_collate_fn
     )
     
@@ -382,7 +391,7 @@ def main():
                        help="Directory to save model and results")
     parser.add_argument("--num_epochs", type=int, default=10,
                        help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=16,
+    parser.add_argument("--batch_size", type=int, default=32,
                        help="Batch size for training and evaluation")
     parser.add_argument("--learning_rate", type=float, default=2e-5,
                        help="Learning rate for optimizer")
@@ -412,6 +421,12 @@ def main():
                        help="Whether to run training")
     parser.add_argument("--do_eval", action="store_true",
                        help="Whether to run evaluation on test set")
+    
+    # Add dataloader optimization arguments
+    parser.add_argument("--num_workers", type=int, default=4,
+                       help="Number of worker processes for data loading")
+    parser.add_argument("--prefetch_factor", type=int, default=2,
+                       help="Number of batches loaded in advance by each worker")
     
     args = parser.parse_args()
     
