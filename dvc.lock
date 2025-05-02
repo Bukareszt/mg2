@@ -1,0 +1,10 @@
+schema: '2.0'
+stages:
+  preprocess:
+    cmd: "python process_dataset.py  --data_size 100 --seed 42 --response_tokens_list\
+      \ 0,5,10,20,30,40,50\n"
+    deps:
+    - path: process_dataset.py
+      hash: md5
+      md5: 22603f3f82c0732c8e8a322db688f11b
+      size: 9883
