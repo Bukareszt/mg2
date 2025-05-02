@@ -34,8 +34,8 @@ stages:
         --data_dir data/lmsys_vicuna-13b_${item}_100K
         --model_name prajjwal1/bert-tiny
         --output_dir results/bert_length_predictor_${item}
-        --num_epochs 12
-        --batch_size 32
+        --num_epochs 40
+        --batch_size 60
         --learning_rate 3e-5
         --weight_decay 0.01
         --warmup_ratio 0.1
