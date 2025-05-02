@@ -2,7 +2,7 @@ stages:
   preprocess:
     cmd: >
       python process_dataset.py 
-      --data_size 100
+      --data_size 1000
       --seed 42
       --response_tokens_list 0,5,10,20,30,40,50
     deps:
@@ -12,7 +12,7 @@ stages:
     cmd: >
       python generate_phi_responses.py
       --data_size 100
-      --batch_size 16
+      --batch_size 12
       --seed 42
       --output_dir ./data
       --max_length 512
@@ -21,7 +21,6 @@ stages:
 
   train_length_predictors:
     foreach:
-      - normal
       - preview5
       - preview10
       - preview20
