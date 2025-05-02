@@ -11,7 +11,7 @@ class BasicBertForRegression(nn.Module):
         self.bert = BertModel.from_pretrained(model_name)
         
 
-        self.cls = nn.Linear(config.hidden_size, hidden_dim)
+        self.cls = nn.Linear(self.bert.config.hidden_size, hidden_dim)
         self.relu = nn.ReLU()
 
         self.fc1 = nn.Linear(hidden_dim, hidden_dim)
