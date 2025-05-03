@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from datasets import load_from_disk
-from transformers import get_linear_schedule_with_warmup
+from transformers import get_linear_schedule_with_warmup, AutoTokenizer, AutoModelForCausalLM
 from models.BasicBert import BasicBertForRegression
 import logging
 from tqdm import tqdm
@@ -153,7 +153,7 @@ def train(args):
     
     model = get_model(args)
     model.to(device)
-    
+
     # Define optimizer and scheduler
     optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     
@@ -211,6 +211,7 @@ def train(args):
         
         # Validation
         model.eval()
+
         val_loss = 0
         all_preds = []
         all_labels = []
@@ -310,6 +311,27 @@ def train(args):
     
     return model, best_val_loss, metrics
 
+def generate_step_by_step_batch(model, tokenizer, prompts: list[str], steps: int) -> list[str]:
+    """
+    Generates tokens step-by-step for a batch of prompts.
+    Returns list of final texts (prompt + generated tokens).
+    """
+    device = next(model.parameters()).device
+    generated_texts = prompts[:]
+    
+    for _ in range(steps):
+        inputs = tokenizer(generated_texts, return_tensors="pt", padding=True, truncation=True).to(device)
+        outputs = model(**inputs)
+        next_token_logits = outputs.logits[:, -1, :]
+        next_token_ids = torch.argmax(next_token_logits, dim=-1)
+        new_tokens = tokenizer.batch_decode(next_token_ids, skip_special_tokens=True)
+
+        # Append new tokens to current texts
+        generated_texts = [txt + token for txt, token in zip(generated_texts, new_tokens)]
+
+    return generated_texts
+
+
 def evaluate(args):
     """Evaluation function."""
     set_seed(args.seed)
@@ -339,7 +361,7 @@ def evaluate(args):
     
     test_dataloader = DataLoader(
         test_dataset, 
-        batch_size=args.batch_size,
+        batch_size=2,
         pin_memory=True,
         num_workers=args.num_workers,
         prefetch_factor=args.prefetch_factor,
@@ -356,6 +378,18 @@ def evaluate(args):
     model.to(device)
     model.eval()
     
+    vicuna_model_name = "lmsys/vicuna-13b-v1.3"
+    bert_tokenizer = AutoTokenizer.from_pretrained(args.model_name, use_fast=False)
+    # Load tokenizer and model
+    vicuna_tokenizer = AutoTokenizer.from_pretrained(vicuna_model_name, use_fast=False)
+    vicuna_model = AutoModelForCausalLM.from_pretrained(
+            vicuna_model_name,
+            device_map="auto",  # Automatically distributes across available GPUs
+            load_in_4bit=True,  # If using bitsandbytes (low memory footprint)
+            torch_dtype=torch.float16,  # Optional depending on GPU
+    )
+    vicuna_model.eval()
+    
     # Evaluation
     all_preds = []
     all_labels = []
@@ -370,34 +404,50 @@ def evaluate(args):
     
     with torch.no_grad():
         for batch in tqdm(test_dataloader, desc="Testing"):
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].float().to(device)
-            
-            # Measure inference time
+            prompts = batch['prompt']  # List[str], one prompt per sample
+
+            # Step-by-step token generation for full batch
+            extended_prompts = generate_step_by_step_batch(
+                model=vicuna_model,
+                tokenizer=vicuna_tokenizer,
+                prompts=prompts,
+                steps=args.max_gen_tokens
+            )
+
+            # Tokenize all new prompts at once with BERT tokenizer
+            bert_tokenized = bert_tokenizer(
+                extended_prompts,
+                return_tensors="pt",
+                padding="max_length",
+                truncation=True,
+                max_length=512
+            ).to(device)
+
             start_time = time.time()
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            outputs = model(
+                input_ids=bert_tokenized['input_ids'],
+                attention_mask=bert_tokenized['attention_mask']
+            )
             end_time = time.time()
             batch_latency = end_time - start_time
-            
-            # Calculate L1 loss
+
+            # Loss and predictions
             batch_loss = criterion(outputs, labels).item()
             l1_loss += batch_loss
-            
-            # Get predictions and labels as numpy arrays
+
             batch_preds = outputs.view(-1).cpu().numpy()
             batch_labels = labels.view(-1).cpu().numpy()
-            
-            # Record results with row number, actual length, predicted length, and latency
+
             for i in range(len(batch_preds)):
                 evaluation_results.append({
                     'row': row_counter,
                     'actual_length': float(batch_labels[i]),
                     'predicted_length': float(batch_preds[i]),
-                    'latency': float(batch_latency / len(batch_preds))  # Per-sample latency (approximate)
+                    'latency': float(batch_latency / len(batch_preds))
                 })
                 row_counter += 1
-            
+
             all_preds.extend(batch_preds)
             all_labels.extend(batch_labels)
             latencies.append(batch_latency)

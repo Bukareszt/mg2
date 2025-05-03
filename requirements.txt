@@ -16,3 +16,5 @@ tensorboard==2.16.2
 wandb
 dvc
 dvc[s3]
+accelerate
+bitsandbytes

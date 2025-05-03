@@ -2,9 +2,9 @@ stages:
   preprocess:
     cmd: >
       python process_dataset.py 
-      --data_size 100
+      --data_size 10
       --seed 42
-      --response_tokens_list 0,5,10,20,30,40,50
+      --response_tokens_list 0,2,5,10
     deps:
       - process_dataset.py
 
@@ -21,17 +21,14 @@ stages:
 
   train_length_predictors:
     foreach:
-      - normal
-      - preview5
-      - preview10
-      - preview20
-      - preview30
-      - preview40
-      - preview50
+      - 0
+      - 2
+      - 5
+      - 10
     do:
       cmd: >
         python lenght_prediction.py
-        --data_dir data/lmsys_vicuna-13b_${item}_200K
+        --data_dir data/lmsys_vicuna-13b_preview${item}_10K
         --model_name google-bert/bert-base-uncased
         --output_dir results/bert_length_predictor_${item}
         --num_epochs 40
@@ -45,6 +42,7 @@ stages:
         --wandb_project output-length-prediction
         --do_train
         --do_eval
+        --max_gen_tokens ${item}
       deps:
         - lenght_prediction.py
         - models/BasicBert.py
