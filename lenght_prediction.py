@@ -559,6 +559,8 @@ def main():
     # Add minimal loss improvement threshold argument
     parser.add_argument("--min_loss_improvement", type=float, default=1,
                        help="Minimum validation loss improvement to consider as significant")
+
+    parser.add_argument('--max_gen_tokens', type=int, default=5)
     
     args = parser.parse_args()
     
