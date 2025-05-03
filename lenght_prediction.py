@@ -14,7 +14,8 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from logger import Logger
-
+import time  # Add import for timing
+import csv
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -358,10 +359,14 @@ def evaluate(args):
     # Evaluation
     all_preds = []
     all_labels = []
+    latencies = []  # Track latency for each batch
+    evaluation_results = []  # Store results for output file
     
     # Also calculate L1 loss explicitly
     criterion = nn.L1Loss()
     l1_loss = 0.0
+    
+    row_counter = 0  # Initialize row counter
     
     with torch.no_grad():
         for batch in tqdm(test_dataloader, desc="Testing"):
@@ -369,24 +374,48 @@ def evaluate(args):
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].float().to(device)
             
+            # Measure inference time
+            start_time = time.time()
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            end_time = time.time()
+            batch_latency = end_time - start_time
             
             # Calculate L1 loss
             batch_loss = criterion(outputs, labels).item()
             l1_loss += batch_loss
             
-            all_preds.extend(outputs.view(-1).cpu().numpy())
-            all_labels.extend(labels.view(-1).cpu().numpy())
+            # Get predictions and labels as numpy arrays
+            batch_preds = outputs.view(-1).cpu().numpy()
+            batch_labels = labels.view(-1).cpu().numpy()
+            
+            # Record results with row number, actual length, predicted length, and latency
+            for i in range(len(batch_preds)):
+                evaluation_results.append({
+                    'row': row_counter,
+                    'actual_length': float(batch_labels[i]),
+                    'predicted_length': float(batch_preds[i]),
+                    'latency': float(batch_latency / len(batch_preds))  # Per-sample latency (approximate)
+                })
+                row_counter += 1
+            
+            all_preds.extend(batch_preds)
+            all_labels.extend(batch_labels)
+            latencies.append(batch_latency)
     
     metrics = compute_metrics(all_preds, all_labels)
     avg_l1_loss = l1_loss / len(test_dataloader)
     metrics['l1_loss'] = avg_l1_loss
+    
+    # Calculate average latency
+    avg_latency = sum(latencies) / len(latencies)
+    metrics['avg_latency'] = avg_latency
     
     logger.info("Test Metrics:")
     logger.info(f"  L1 Loss: {avg_l1_loss:.4f}")
     logger.info(f"  MAE: {metrics['mae']:.4f}")
     logger.info(f"  RMSE: {metrics['rmse']:.4f}")
     logger.info(f"  R²: {metrics['r2']:.4f}")
+    logger.info(f"  Avg Latency: {avg_latency:.4f} seconds")
     
     # Log test metrics to wandb
     if args.use_wandb:
@@ -395,9 +424,32 @@ def evaluate(args):
             "test/mae": metrics['mae'],
             "test/mse": metrics['mse'],
             "test/rmse": metrics['rmse'],
-            "test/r2": metrics['r2']
+            "test/r2": metrics['r2'],
+            "performance/avg_latency": avg_latency
         }
         wandb_logger.log_metrics(test_metrics)
+        
+        # Save evaluation results to file and log as artifact
+        output_path = os.path.join(args.output_dir, "evaluation_results.csv")
+        with open(output_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['row', 'actual_length', 'predicted_length', 'latency'])
+            for result in evaluation_results:
+                writer.writerow([
+                    result['row'],
+                    result['actual_length'],
+                    result['predicted_length'],
+                    result['latency']
+                ])
+        
+        # Use the logger to log the artifact instead of direct wandb API
+        wandb_logger.log_artifact(
+            file_path=output_path, 
+            name="evaluation_results", 
+            artifact_type="eval_results"
+        )
+        
+        logger.info(f"Saved evaluation results to {output_path} and uploaded to wandb as artifact")
     
     return metrics
 

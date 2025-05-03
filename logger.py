@@ -132,4 +132,22 @@ class Logger:
         Finish the logging session.
         """
         if self.enable_logging and self.run is not None:
-            wandb.finish() 
+            wandb.finish()
+    
+    def log_artifact(self, file_path, name, artifact_type):
+        """
+        Log a file as an artifact to Weights & Biases.
+        
+        Args:
+            file_path (str): Path to the file to be logged
+            name (str): Name of the artifact
+            artifact_type (str): Type of the artifact
+        """
+        if not self.enable_logging:
+            return
+        
+        artifact = wandb.Artifact(name=name, type=artifact_type)
+        artifact.add_file(file_path)
+        wandb.log_artifact(artifact)
+        
+        return artifact 
