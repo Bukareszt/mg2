@@ -192,8 +192,7 @@ if __name__ == '__main__':
         dataset_path = 'vicuna-13b_'
 
         # Add information about response preview tokens to the path name
-        if token_count > 0:
-            dataset_path += f'preview{token_count}_'
+        dataset_path += f'preview{token_count}_'
 
         dataset_path = 'data/lmsys_' + dataset_path + f'{int(selected_data_size / 1000)}K'
 
