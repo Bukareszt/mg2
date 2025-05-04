@@ -210,7 +210,7 @@ if __name__ == '__main__':
 
         # Process test data with ZERO response tokens regardless of training setting
         print(f"Processing test data with 0 response tokens (for proper evaluation)...")
-        test_dataset = preprocess_dataset(test_raw, add_response_tokens=0)
+        test_dataset = preprocess_dataset(test_raw, add_response_tokens=token_count)
         test_dataset.set_format("torch")
 
         print(

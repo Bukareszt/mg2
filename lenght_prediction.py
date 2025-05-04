@@ -363,7 +363,7 @@ def evaluate(args):
     
     test_dataloader = DataLoader(
         test_dataset, 
-        batch_size=2,
+        batch_size=args.batch_size,  # Use the same batch size as training
         pin_memory=True,
         num_workers=args.num_workers,
         prefetch_factor=args.prefetch_factor,
@@ -380,17 +380,18 @@ def evaluate(args):
     model.to(device)
     model.eval()
     
-    vicuna_model_name = "lmsys/vicuna-13b-v1.3"
-    bert_tokenizer = AutoTokenizer.from_pretrained(args.model_name, use_fast=False)
+    # Comment out Vicuna model loading
+    # vicuna_model_name = "lmsys/vicuna-13b-v1.3"
+    # bert_tokenizer = AutoTokenizer.from_pretrained(args.model_name, use_fast=False)
     # Load tokenizer and model
-    vicuna_tokenizer = AutoTokenizer.from_pretrained(vicuna_model_name, use_fast=False)
-    vicuna_model = AutoModelForCausalLM.from_pretrained(
-            vicuna_model_name,
-            device_map="auto",  # Automatically distributes across available GPUs
-            load_in_4bit=True,  # If using bitsandbytes (low memory footprint)
-            torch_dtype=torch.float16,  # Optional depending on GPU
-    )
-    vicuna_model.eval()
+    # vicuna_tokenizer = AutoTokenizer.from_pretrained(vicuna_model_name, use_fast=False)
+    # vicuna_model = AutoModelForCausalLM.from_pretrained(
+    #        vicuna_model_name,
+    #        device_map="auto",  # Automatically distributes across available GPUs
+    #        load_in_4bit=True,  # If using bitsandbytes (low memory footprint)
+    #        torch_dtype=torch.float16,  # Optional depending on GPU
+    # )
+    # vicuna_model.eval()
     
     # Evaluation
     all_preds = []
@@ -406,39 +407,46 @@ def evaluate(args):
     
     with torch.no_grad():
         for batch in tqdm(test_dataloader, desc="Testing"):
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].float().to(device)
-            prompts = batch['prompt']  # List[str], one prompt per sample
 
+            # Comment out step-by-step token generation
+            # prompts = batch['prompt']  # List[str], one prompt per sample
             # Step-by-step token generation for full batch
-            extended_prompts = generate_step_by_step_batch(
-                model=vicuna_model,
-                tokenizer=vicuna_tokenizer,
-                prompts=prompts,
-                steps=args.max_gen_tokens
-            )
+            # extended_prompts = generate_step_by_step_batch(
+            #     model=vicuna_model,
+            #     tokenizer=vicuna_tokenizer,
+            #     prompts=prompts,
+            #     steps=args.max_gen_tokens
+            # )
 
             # Tokenize all new prompts at once with BERT tokenizer
-            bert_tokenized = bert_tokenizer(
-                extended_prompts,
-                return_tensors="pt",
-                padding="max_length",
-                truncation=True,
-                max_length=512
-            ).to(device)
+            # bert_tokenized = bert_tokenizer(
+            #     extended_prompts,
+            #     return_tensors="pt",
+            #     padding="max_length",
+            #     truncation=True,
+            #     max_length=512
+            # ).to(device)
 
             start_time = time.time()
+            # Use the input_ids and attention_mask directly from the batch
             outputs = model(
-                input_ids=bert_tokenized['input_ids'],
-                attention_mask=bert_tokenized['attention_mask']
+                input_ids=input_ids,
+                attention_mask=attention_mask
             )
             end_time = time.time()
             batch_latency = end_time - start_time
 
+            # Round outputs for integer predictions
+            rounded_outputs = torch.round(outputs)
+            
             # Loss and predictions
-            batch_loss = criterion(outputs, labels).item()
+            batch_loss = criterion(rounded_outputs, torch.round(labels)).item()
             l1_loss += batch_loss
 
-            batch_preds = outputs.view(-1).cpu().numpy()
+            batch_preds = rounded_outputs.view(-1).cpu().numpy()
             batch_labels = labels.view(-1).cpu().numpy()
 
             for i in range(len(batch_preds)):
