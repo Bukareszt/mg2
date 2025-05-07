@@ -70,15 +70,3 @@ stages:
         - lenght_prediction.py
         - models/BasicBert.py
 
-  train:
-    # ... existing code ...
-    params:
-      - common_logging_params
-    # ... existing code ...
-  
-  evaluate:
-    # ... existing code ...
-    params:
-      - common_logging_params
-    # ... existing code ...
-
