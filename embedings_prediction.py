@@ -614,7 +614,6 @@ def evaluate(args):
     all_labels = []
     evaluation_results = []
     row_counter = 0
-    latencies = []
     
     # Also calculate L1 loss explicitly
     criterion = nn.L1Loss()
@@ -624,9 +623,6 @@ def evaluate(args):
         for batch in tqdm(test_dataloader, desc="Testing"):
             prompts = batch['prompt']
             labels = batch['labels'].float().to(device)
-            
-            # Measure latency
-            start_time = time.time()
             
             # Extract embeddings from Vicuna model using raw prompts
             with autocast(enabled=args.use_amp):
@@ -640,10 +636,7 @@ def evaluate(args):
                 
                 outputs = model(embeddings)
             
-            end_time = time.time()
-            batch_latency = end_time - start_time
-            latencies.append(batch_latency)
-            
+        
             # Loss and predictions
             batch_loss = criterion(outputs.float(), labels.float()).item()
             l1_loss += batch_loss
@@ -656,8 +649,7 @@ def evaluate(args):
                 evaluation_results.append({
                     'row': row_counter,
                     'actual_length': float(batch_labels[i]),
-                    'predicted_length': float(batch_preds[i]),
-                    'latency': float(batch_latency / len(batch_preds))
+                    'predicted_length': float(batch_preds[i])
                 })
                 row_counter += 1
             
@@ -669,16 +661,11 @@ def evaluate(args):
     avg_l1_loss = l1_loss / len(test_dataloader)
     metrics['l1_loss'] = avg_l1_loss
     
-    # Calculate average latency
-    avg_latency = sum(latencies) / len(latencies)
-    metrics['avg_latency'] = avg_latency
-    
     logger.info("Test Metrics:")
     logger.info(f"  L1 Loss: {avg_l1_loss:.4f}")
     logger.info(f"  MAE: {metrics['mae']:.4f}")
     logger.info(f"  RMSE: {metrics['rmse']:.4f}")
     logger.info(f"  R²: {metrics['r2']:.4f}")
-    logger.info(f"  Avg Latency: {avg_latency:.4f} seconds")
     
     # Log test metrics to wandb
     if args.use_wandb:
@@ -687,32 +674,10 @@ def evaluate(args):
             "test/mae": metrics['mae'],
             "test/mse": metrics['mse'],
             "test/rmse": metrics['rmse'],
-            "test/r2": metrics['r2'],
-            "performance/avg_latency": avg_latency
+            "test/r2": metrics['r2']
         }
         wandb_logger.log_metrics(test_metrics)
         
-        # Save evaluation results to file and log as artifact
-        output_path = os.path.join(args.output_dir, "evaluation_results.csv")
-        with open(output_path, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['row', 'actual_length', 'predicted_length', 'latency'])
-            for result in evaluation_results:
-                writer.writerow([
-                    result['row'],
-                    result['actual_length'],
-                    result['predicted_length'],
-                    result['latency']
-                ])
-        
-        # Use the logger to log the artifact
-        wandb_logger.log_artifact(
-            file_path=output_path, 
-            name="evaluation_results", 
-            artifact_type="eval_results"
-        )
-        
-        logger.info(f"Saved evaluation results to {output_path} and uploaded to wandb as artifact")
         wandb_logger.finish()
     
     return metrics
