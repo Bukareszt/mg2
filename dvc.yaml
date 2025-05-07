@@ -24,8 +24,6 @@ stages:
       python embedings_prediction.py
       --data_dir data/lmsys_vicuna-13b_preview0_100K
       --output_dir results/lama_embeddings_predictor_0
-      --use_wandb
-      --wandb_project output-length-prediction
       --do_train
       --do_eval
 
