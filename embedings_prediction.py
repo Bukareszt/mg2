@@ -11,7 +11,7 @@ from tqdm import tqdm
 from datasets import load_from_disk
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_linear_schedule_with_warmup
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-
+import argparse
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -548,7 +548,7 @@ def evaluate(args):
     
     return metrics
 
-def main():
+if __name__ == '__main__':
     import argparse
     
     parser = argparse.ArgumentParser()
@@ -621,6 +621,3 @@ def main():
     
     if args.do_eval:
         evaluate(args)
-
-if __name__ == '__main__':
-    main()
