@@ -33,7 +33,7 @@ stages:
         --do_eval
         --use_wandb
         --wandb_project output-length-prediction
-        --aggregation ${item.name}
+        --aggregation ${item}
       deps:
         - embedings_prediction.py
 
