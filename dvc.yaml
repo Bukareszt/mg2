@@ -22,8 +22,7 @@ stages:
   train_embeddings_predictors:
     cmd: >
       python embedings_prediction.py
-      --data_dir data/lmsys_vicuna-13b_gen_1000K
-      --model_name google-bert/bert-base-uncased
+      --data_dir data/lmsys_vicuna-13b_preview0_100K
       --output_dir results/lama_embeddings_predictor_0
 
   train_length_predictors:
