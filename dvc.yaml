@@ -32,7 +32,7 @@ stages:
     do:
       cmd: >
         python embedings_prediction.py
-        --data_dir data/lmsys_vicuna-13b_preview0_100K
+        --data_dir data/lmsys_vicuna-13b_normal_100K
         --output_dir results/embeddings_predictor_${item}
         --do_train
         --do_eval
