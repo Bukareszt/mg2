@@ -7,23 +7,28 @@ stages:
       --response_tokens_list 0,1,2,3,4,5
     deps:
       - process_dataset.py
-
-  process_for_embeddings:
-    cmd: >
-      python embedings_preprocess.py
-      --data_size 10
-      --seed 42
-      --llama_model_name meta-llama/Llama-3.1-8B-Instruct
-      --output_dir ./data
-      --batch_size 4
-      --max_new_tokens 8192
-      --hf_token $HF_TOKEN
       
   train_embeddings_predictors:
     foreach:
-      # - "mean"
-      - "max"
-      # - "concat"
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+      - 17
+      - 18
     do:
       cmd: >
         python embedings_prediction.py
@@ -33,9 +38,7 @@ stages:
         --do_eval
         --use_wandb
         --wandb_project output-length-prediction
-        --aggregation ${item}
-      deps:
-        - embedings_prediction.py
+        --layer_idx ${item}
 
   train_length_predictors:
     foreach:
