@@ -252,22 +252,17 @@ def train_model(args):
     # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
     
-    # Load datasets
+    # Load dataset
     logger.info(f"Loading train dataset from {args.data_dir}_train")
     train_dataset = load_from_disk(f"{args.data_dir}_train")
     
     logger.info(f"Loading validation dataset from {args.data_dir}_val")
     val_dataset = load_from_disk(f"{args.data_dir}_val")
     
-    # Load Vicuna model and tokenizer
-    logger.info("Loading Vicuna model for embedding extraction")
-    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision)
-    vicuna_model.eval()  # Set to evaluation mode for embedding extraction
-    
-    # DataLoaders
+    # Create data loaders
     train_dataloader = DataLoader(
         train_dataset, 
-        batch_size=args.batch_size, 
+        batch_size=args.batch_size,
         shuffle=True,
         pin_memory=True,
         num_workers=args.num_workers,
@@ -286,14 +281,19 @@ def train_model(args):
         collate_fn=custom_collate_fn
     )
     
-    # Get a sample to determine embedding size
-    logger.info("Extracting a sample embedding to determine input dimension")
+    # Load Vicuna model for embedding extraction
+    logger.info("Loading Vicuna model for training")
+    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision)
+    vicuna_model.eval()  # Set model to evaluation mode for embedding extraction
+    
+    # Get a sample batch to determine embedding size
     sample_batch = next(iter(train_dataloader))
     sample_prompts = sample_batch['prompt'][:1]  # Just use the first prompt
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
     
+    # Extract sample embedding to determine input dimension
     with torch.no_grad():
         sample_embedding = extract_batched_embeddings(
             vicuna_model, tokenizer, sample_prompts, args.layer_idx, device
@@ -301,90 +301,87 @@ def train_model(args):
         input_dim = sample_embedding.shape[1]
         logger.info(f"Detected embedding dimension: {input_dim}")
     
-    # Initialize model
+    # Initialize model, loss function, and optimizer
     model = TokenLengthPredictor(input_dim=input_dim, hidden_dim=args.hidden_dim)
     model.to(device)
-    logger.info(f"Model has {sum(p.numel() for p in model.parameters())} parameters")
+    logger.info(f"Model has {sum(p.numel() for p in model.parameters()):,} parameters")
     
-    # Set up optimizer and scheduler
+    # Initialize optimizer and loss function
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    
-    # Linear learning rate scheduler with warmup
-    total_steps = len(train_dataloader) * args.num_epochs
-    warmup_steps = int(total_steps * args.warmup_ratio)
-    
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer, 
-        num_warmup_steps=warmup_steps, 
-        num_training_steps=total_steps
-    )
-    
-    lr_scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
-    
-    # Loss function
     criterion = nn.L1Loss()
+    
+    # Initialize learning rate scheduler
+    lr_scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2, verbose=True)
     
     # Initialize gradient scaler for mixed precision training
     scaler = GradScaler(enabled=args.use_amp)
     
     # Training loop
     best_val_loss = float('inf')
-    train_losses = []
-    val_losses = []
-    
-    # Early stopping variables
     early_stop_counter = 0
     early_stop_patience = args.early_stopping_patience
     
-    logger.info("Starting training...")
+    train_losses = []
+    val_losses = []
+    
+    # Extract dataset info for logging
+    dataset_info = extract_dataset_info(args.data_dir)
+    logger.info(f"Training on dataset: {dataset_info}")
     
     for epoch in range(args.num_epochs):
-        # Training
         model.train()
-        epoch_loss = 0
+        train_loss = 0
+        
+        # Progress bar for training
+        train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{args.num_epochs}")
+        
+        # Prediction and label collections for metric calculation
         train_preds = []
         train_labels = []
         
-        progress_bar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{args.num_epochs}")
-        
-        for batch in progress_bar:
+        for batch in train_pbar:
             prompts = batch['prompt']
             labels = batch['labels'].float().to(device)
             
+            # Zero gradients
             optimizer.zero_grad()
             
             # Extract embeddings from Vicuna model using raw prompts
-            with torch.no_grad():
-                with autocast(enabled=args.use_amp):
+            with autocast(enabled=args.use_amp):
+                with torch.no_grad():
                     embeddings = extract_batched_embeddings(
                         vicuna_model, tokenizer, prompts, args.layer_idx, device
                     )
-            
-            # Forward pass with mixed precision
-            with autocast(enabled=args.use_amp):
+                
+                # Ensure embeddings are the same type as model parameters
+                if next(model.parameters()).dtype != embeddings.dtype:
+                    embeddings = embeddings.to(next(model.parameters()).dtype)
+                
                 outputs = model(embeddings)
                 loss = criterion(outputs, labels)
             
-            # Backward pass with gradient scaling
+            # Backward pass with gradient scaling for mixed precision
             scaler.scale(loss).backward()
             
-            # Gradient clipping and optimizer step
+            # Gradient clipping
             if args.max_grad_norm > 0:
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
             
+            # Update weights with gradient scaling for mixed precision
             scaler.step(optimizer)
             scaler.update()
             
-            # Statistics
-            epoch_loss += loss.item()
+            # Update training loss and progress bar
+            train_loss += loss.item()
+            train_pbar.set_postfix({"loss": loss.item()})
+            
+            # Collect predictions and labels for metric calculation
             train_preds.extend(outputs.detach().cpu().numpy())
             train_labels.extend(labels.cpu().numpy())
-            
-            progress_bar.set_postfix({"training_loss": f"{loss.item():.4f}"})
         
-        # Calculate training metrics
-        avg_train_loss = epoch_loss / len(train_dataloader)
+        # Calculate average training loss and metrics
+        avg_train_loss = train_loss / len(train_dataloader)
         train_losses.append(avg_train_loss)
         train_metrics = compute_metrics(train_preds, train_labels)
         
@@ -404,8 +401,17 @@ def train_model(args):
                     embeddings = extract_batched_embeddings(
                         vicuna_model, tokenizer, prompts, args.layer_idx, device
                     )
+                    
+                    # Ensure embeddings are the same type as model parameters
+                    if next(model.parameters()).dtype != embeddings.dtype:
+                        embeddings = embeddings.to(next(model.parameters()).dtype)
+                    
+                    outputs = model(embeddings)
                 
-                outputs = model(embeddings)
+                # Convert outputs to float32 for loss calculation
+                if outputs.dtype != torch.float32:
+                    outputs = outputs.float()
+                
                 loss = criterion(outputs, labels)
                 
                 val_loss += loss.item()
