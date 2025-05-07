@@ -67,25 +67,35 @@ def custom_collate_fn(batch):
         
     return batch_by_keys
 
-def extract_llama_embeddings(model, tokenizer, text, layer_idx=-1, device='cuda' if torch.cuda.is_available() else 'cpu'):
+def format_vicuna_prompt(text):
+    """Format a prompt for Vicuna models"""
+    # Vicuna uses a different format than LLaMA-3
+    # For most Vicuna models, the format is:
+    # "USER: {user_message}\nASSISTANT:"
+    return f"USER: {text}\nASSISTANT:"
+
+def extract_vicuna_embeddings(model, tokenizer, text, layer_idx=-1, device='cuda' if torch.cuda.is_available() else 'cpu'):
     """
-    Extract embeddings from a specific layer of a LLaMA model for a single text input.
+    Extract embeddings from a specific layer of a Vicuna model for a single text input.
     
     Args:
-        model: The LLaMA model
-        tokenizer: The LLaMA tokenizer
+        model: The Vicuna model
+        tokenizer: The Vicuna tokenizer
         text: The input text to process
         layer_idx: The index of the layer to extract embeddings from (-1 for last layer)
         device: Device to run inference on
         
     Returns:
-        Tensor of embeddings of shape [1, 4096]
+        Tensor of embeddings of shape [1, hidden_size]
     """
+    # Format the prompt for Vicuna
+    formatted_text = format_vicuna_prompt(text)
+    
     # Move model to the specified device if not already there
     model = model.to(device)
     
     # Tokenize input text
-    inputs = tokenizer(text, return_tensors="pt").to(device)
+    inputs = tokenizer(formatted_text, return_tensors="pt").to(device)
     
     # Run forward pass with output_hidden_states=True to get hidden states
     with torch.no_grad():
@@ -106,11 +116,11 @@ def extract_llama_embeddings(model, tokenizer, text, layer_idx=-1, device='cuda'
 
 def extract_batched_embeddings(model, tokenizer, prompts, layer_idx=-1, device='cuda' if torch.cuda.is_available() else 'cpu'):
     """
-    Extract embeddings for a batch of prompts in a single forward pass.
+    Extract embeddings for a batch of prompts in a single forward pass from Vicuna model.
     
     Args:
-        model: The LLaMA model
-        tokenizer: The LLaMA tokenizer
+        model: The Vicuna model
+        tokenizer: The Vicuna tokenizer
         prompts: List of prompt strings
         layer_idx: The index of the layer to extract embeddings from (-1 for last layer)
         device: Device to run inference on
@@ -118,21 +128,24 @@ def extract_batched_embeddings(model, tokenizer, prompts, layer_idx=-1, device='
     Returns:
         Batch of embeddings [batch_size, hidden_size]
     """
-    inputs = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True).to(device)
+    # Format prompts for Vicuna
+    formatted_prompts = [format_vicuna_prompt(prompt) for prompt in prompts]
+    
+    inputs = tokenizer(formatted_prompts, return_tensors="pt", padding=True, truncation=True).to(device)
     with torch.no_grad():
         outputs = model(**inputs, output_hidden_states=True)
     layer_output = outputs.hidden_states[layer_idx]  # [batch_size, seq_len, hidden_dim]
     mean_embeddings = layer_output.mean(dim=1)       # Mean over tokens
     return mean_embeddings
 
-def predict_remaining_tokens(model, llama_model, tokenizer, text, layer_idx=-1):
+def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_idx=-1):
     """
     Predict the number of remaining tokens in an LLM output sequence.
     
     Args:
         model: The TokenLengthPredictor model
-        llama_model: The LLaMA model
-        tokenizer: The LLaMA tokenizer
+        vicuna_model: The Vicuna model
+        tokenizer: The Vicuna tokenizer
         text: The input text to process
         layer_idx: The index of the layer to extract embeddings from
         
@@ -141,34 +154,34 @@ def predict_remaining_tokens(model, llama_model, tokenizer, text, layer_idx=-1):
     """
     # Set models to evaluation mode
     model.eval()
-    llama_model.eval()
+    vicuna_model.eval()
     
-    # Extract embeddings from LLaMA model
+    # Extract embeddings from Vicuna model
     device = next(model.parameters()).device
-    embeddings = extract_llama_embeddings(llama_model, tokenizer, text, layer_idx, device)
+    embeddings = extract_vicuna_embeddings(vicuna_model, tokenizer, text, layer_idx, device)
     
     # Make prediction with the model
     with torch.no_grad():
-        output = model(embeddings)
+        prediction = model(embeddings)
     
-    return output.item()
+    return prediction.item()
 
-def load_llama_model(model_name="meta-llama/Llama-2-8b-hf", use_auth_token=None, precision="float16"):
+def load_vicuna_model(model_name="lmsys/vicuna-13b-v1.3", use_auth_token=None, precision="float16"):
     """
-    Load a LLaMA model and tokenizer.
+    Load a Vicuna model and tokenizer.
     
     Args:
-        model_name: The name of the model to load (default: meta-llama/Llama-2-8b-hf)
+        model_name: The name of the model to load (default: lmsys/vicuna-13b-v1.3)
         use_auth_token: HuggingFace token for accessing gated models
         precision: Model precision - "float16", "bfloat16", or "float32"
         
     Returns:
         model, tokenizer
     """
-    logger.info(f"Loading LLaMA model: {model_name} with precision {precision}")
+    logger.info(f"Loading Vicuna model: {model_name} with precision {precision}")
     
     # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=use_auth_token)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=use_auth_token, legacy=False)
     
     # Determine torch dtype based on precision argument
     if precision == "bfloat16" and torch.cuda.is_available() and torch.cuda.is_bf16_supported():
@@ -187,7 +200,7 @@ def load_llama_model(model_name="meta-llama/Llama-2-8b-hf", use_auth_token=None,
         use_auth_token=use_auth_token,
         output_hidden_states=True,
         torch_dtype=torch_dtype,  # Use specified precision
-        device_map="auto"         # Automatically distribute across available GPUs
+        device_map="auto",        # Automatically distribute across available GPUs
     )
     
     return model, tokenizer
@@ -233,19 +246,25 @@ def extract_dataset_info(data_dir):
     return "normal"
 
 def train_model(args):
-    """Train the token length predictor with datasets from disk."""
+    """Training function."""
     set_seed(args.seed)
     
-    # Extract dataset info from data directory path
-    dataset_info = extract_dataset_info(args.data_dir)
-    logger.info(f"Dataset info: {dataset_info}")
+    # Create output directory if it doesn't exist
+    os.makedirs(args.output_dir, exist_ok=True)
     
     # Load datasets
-    logger.info(f"Loading datasets from {args.data_dir}")
+    logger.info(f"Loading train dataset from {args.data_dir}_train")
     train_dataset = load_from_disk(f"{args.data_dir}_train")
+    
+    logger.info(f"Loading validation dataset from {args.data_dir}_val")
     val_dataset = load_from_disk(f"{args.data_dir}_val")
     
-    # Create data loaders
+    # Load Vicuna model and tokenizer
+    logger.info("Loading Vicuna model for embedding extraction")
+    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision)
+    vicuna_model.eval()  # Set to evaluation mode for embedding extraction
+    
+    # DataLoaders
     train_dataloader = DataLoader(
         train_dataset, 
         batch_size=args.batch_size, 
@@ -256,6 +275,7 @@ def train_model(args):
         persistent_workers=True if args.num_workers > 0 else False,
         collate_fn=custom_collate_fn
     )
+    
     val_dataloader = DataLoader(
         val_dataset, 
         batch_size=args.batch_size,
@@ -266,34 +286,30 @@ def train_model(args):
         collate_fn=custom_collate_fn
     )
     
-    # Load LLaMA model for embedding extraction
-    logger.info("Loading LLaMA model for embedding extraction")
-    llama_model, tokenizer = load_llama_model(args.llama_model_name, args.hf_token, args.precision)
-    llama_model.eval()  # Set to evaluation mode as we only use it for feature extraction
-    
-    # Initialize model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info(f"Using device: {device}")
-    
     # Get a sample to determine embedding size
+    logger.info("Extracting a sample embedding to determine input dimension")
     sample_batch = next(iter(train_dataloader))
     sample_prompts = sample_batch['prompt'][:1]  # Just use the first prompt
     
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Using device: {device}")
+    
     with torch.no_grad():
         sample_embedding = extract_batched_embeddings(
-            llama_model, tokenizer, sample_prompts, args.layer_idx, device
+            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device
         )
         input_dim = sample_embedding.shape[1]
         logger.info(f"Detected embedding dimension: {input_dim}")
     
-    # Initialize model with correct input dimension
+    # Initialize model
     model = TokenLengthPredictor(input_dim=input_dim, hidden_dim=args.hidden_dim)
     model.to(device)
-    logger.info(f"Model parameters: {sum(p.numel() for p in model.parameters())}")
-
-    # Define optimizer and scheduler
+    logger.info(f"Model has {sum(p.numel() for p in model.parameters())} parameters")
+    
+    # Set up optimizer and scheduler
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     
+    # Linear learning rate scheduler with warmup
     total_steps = len(train_dataloader) * args.num_epochs
     warmup_steps = int(total_steps * args.warmup_ratio)
     
@@ -337,11 +353,11 @@ def train_model(args):
             
             optimizer.zero_grad()
             
-            # Extract embeddings from LLaMA model using raw prompts
+            # Extract embeddings from Vicuna model using raw prompts
             with torch.no_grad():
                 with autocast(enabled=args.use_amp):
                     embeddings = extract_batched_embeddings(
-                        llama_model, tokenizer, prompts, args.layer_idx, device
+                        vicuna_model, tokenizer, prompts, args.layer_idx, device
                     )
             
             # Forward pass with mixed precision
@@ -383,10 +399,10 @@ def train_model(args):
                 prompts = batch['prompt']
                 labels = batch['labels'].float().to(device)
                 
-                # Extract embeddings from LLaMA model using raw prompts
+                # Extract embeddings from Vicuna model using raw prompts
                 with autocast(enabled=args.use_amp):
                     embeddings = extract_batched_embeddings(
-                        llama_model, tokenizer, prompts, args.layer_idx, device
+                        vicuna_model, tokenizer, prompts, args.layer_idx, device
                     )
                 
                 outputs = model(embeddings)
@@ -415,42 +431,37 @@ def train_model(args):
         # Update learning rate based on validation loss
         lr_scheduler.step(avg_val_loss)
         
-        # Check if we have a new best model
-        if avg_val_loss < best_val_loss:
-            improvement = best_val_loss - avg_val_loss
-            if improvement >= args.min_loss_improvement:
-                logger.info(f"Validation loss decreased from {best_val_loss:.4f} to {avg_val_loss:.4f} (improvement: {improvement:.4f})")
-                best_val_loss = avg_val_loss
-                early_stop_counter = 0  # Reset counter when validation loss improves significantly
-                
-                # Save the best model
-                if not os.path.exists(args.output_dir):
-                    os.makedirs(args.output_dir)
-                
-                model_path = os.path.join(args.output_dir, "best_model.pt")
-                logger.info(f"Saving best model to {model_path}")
-                
-                torch.save({
-                    'epoch': epoch + 1,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'val_loss': best_val_loss,
-                    'metrics': val_metrics
-                }, model_path)
-            else:
-                logger.info(f"Validation loss decreased from {best_val_loss:.4f} to {avg_val_loss:.4f}, but improvement ({improvement:.4f}) below threshold ({args.min_loss_improvement:.4f})")
-                early_stop_counter += 1
+        # Check if this is the best model so far
+        if avg_val_loss < best_val_loss - args.min_loss_improvement:
+            logger.info(f"Validation loss improved from {best_val_loss:.4f} to {avg_val_loss:.4f}")
+            best_val_loss = avg_val_loss
+            early_stop_counter = 0
+            
+            # Save the model
+            checkpoint = {
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'val_loss': avg_val_loss,
+                'val_metrics': val_metrics,
+                'input_dim': input_dim,
+                'hidden_dim': args.hidden_dim
+            }
+            torch.save(checkpoint, os.path.join(args.output_dir, "best_model.pt"))
+            logger.info(f"Saved new best model to {os.path.join(args.output_dir, 'best_model.pt')}")
         else:
             early_stop_counter += 1
-            logger.info(f"No improvement in validation loss. Early stopping counter: {early_stop_counter}/{early_stop_patience}")
-        
-        # Check if early stopping criteria is met
-        if early_stop_counter >= early_stop_patience:
-            logger.info(f"Early stopping triggered after {early_stop_counter} epochs without significant improvement")
-            break
+            logger.info(f"Validation loss did not improve. Early stopping counter: {early_stop_counter}/{early_stop_patience}")
+            
+            if early_stop_counter >= early_stop_patience:
+                logger.info(f"Early stopping triggered after {epoch+1} epochs")
+                break
     
-    logger.info("Training completed.")
-    return model, best_val_loss, val_metrics
+    # Load the best model for final evaluation
+    checkpoint = torch.load(os.path.join(args.output_dir, "best_model.pt"))
+    model.load_state_dict(checkpoint['model_state_dict'])
+    
+    return model, best_val_loss, checkpoint['val_metrics']
 
 def evaluate(args):
     """Evaluation function."""
@@ -465,15 +476,15 @@ def evaluate(args):
         batch_size=args.batch_size,
         pin_memory=True,
         num_workers=args.num_workers,
-        prefetch_factor=args.prefetch_factor if args.num_workers > 0 else None,
+        prefetch_factor=args.prefetch_factor if args.num_workers > 0 else False,
         persistent_workers=True if args.num_workers > 0 else False,
         collate_fn=custom_collate_fn
     )
     
-    # Load LLaMA model for embedding extraction
-    logger.info("Loading LLaMA model for evaluation")
-    llama_model, tokenizer = load_llama_model(args.llama_model_name, args.hf_token, args.precision)
-    llama_model.eval()
+    # Load Vicuna model for embedding extraction
+    logger.info("Loading Vicuna model for evaluation")
+    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision)
+    vicuna_model.eval()
     
     # Load the best model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -484,7 +495,7 @@ def evaluate(args):
     
     with torch.no_grad():
         sample_embedding = extract_batched_embeddings(
-            llama_model, tokenizer, sample_prompts, args.layer_idx, device
+            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device
         )
         input_dim = sample_embedding.shape[1]
         logger.info(f"Detected embedding dimension: {input_dim}")
@@ -509,11 +520,12 @@ def evaluate(args):
             prompts = batch['prompt']
             labels = batch['labels'].float().to(device)
             
-            # Extract embeddings from LLaMA model using raw prompts
+            # Extract embeddings from Vicuna model using raw prompts
             with autocast(enabled=args.use_amp):
                 embeddings = extract_batched_embeddings(
-                    llama_model, tokenizer, prompts, args.layer_idx, device
+                    vicuna_model, tokenizer, prompts, args.layer_idx, device
                 )
+                
                 outputs = model(embeddings)
             
             # Loss and predictions
@@ -550,10 +562,10 @@ def main():
                         help="Dimension of input embeddings (detected automatically)")
     parser.add_argument("--hidden_dim", type=int, default=512,
                         help="Dimension of hidden layer")
-    parser.add_argument("--llama_model_name", type=str, default="meta-llama/Llama-3.1-8B-Instruct",
-                        help="Name of LLaMA model to use for embedding extraction")
-    parser.add_argument("--layer_idx", type=int, default=-11,
-                        help="Index of LLaMA layer to extract embeddings from (-1 for last layer)")
+    parser.add_argument("--vicuna_model_name", type=str, default="lmsys/vicuna-13b-v1.3",
+                        help="Name of Vicuna model to use for embedding extraction")
+    parser.add_argument("--layer_idx", type=int, default=-1,
+                        help="Index of Vicuna layer to extract embeddings from (-1 for last layer)")
     parser.add_argument("--hf_token", type=str, default=None,
                         help="HuggingFace token for accessing gated models")
     
@@ -593,7 +605,7 @@ def main():
     
     # Precision arguments
     parser.add_argument("--precision", type=str, default="float16", choices=["float16", "bfloat16", "float32"],
-                        help="Precision for LLaMA model")
+                        help="Precision for Vicuna model")
     parser.add_argument("--use_amp", action="store_true",
                         help="Whether to use automatic mixed precision for training and inference")
     
