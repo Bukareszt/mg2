@@ -21,8 +21,8 @@ stages:
       
   train_embeddings_predictors:
     foreach:
-      - "mean"
-      - "max"
+      # - "mean"
+      # - "max"
       - "concat"
     do:
       cmd: >
