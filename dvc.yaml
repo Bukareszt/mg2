@@ -20,14 +20,23 @@ stages:
       --hf_token $HF_TOKEN
       
   train_embeddings_predictors:
-    cmd: >
-      python embedings_prediction.py
-      --data_dir data/lmsys_vicuna-13b_preview0_10K
-      --output_dir results/lama_embeddings_predictor_0
-      --do_train
-      --do_eval
-      --use_wandb
-      --wandb_project output-length-prediction
+    foreach:
+      - { name: "single_layer", agg: null }
+      - { name: "mean_agg", agg: "mean" }
+      - { name: "max_agg", agg: "max" }
+      - { name: "concat_agg", agg: "concat" }
+    do:
+      cmd: >
+        python embedings_prediction.py
+        --data_dir data/lmsys_vicuna-13b_preview0_10K
+        --output_dir results/embeddings_predictor_${item.name}
+        --do_train
+        --do_eval
+        --use_wandb
+        --wandb_project output-length-prediction
+        ${item.agg != null ? '--aggregation ' + item.agg : ''}
+      deps:
+        - embedings_prediction.py
 
   train_length_predictors:
     foreach:

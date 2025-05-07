@@ -78,7 +78,7 @@ def format_vicuna_prompt(text):
     # "USER: {user_message}\nASSISTANT:"
     return f"USER: {text}\nASSISTANT:"
 
-def extract_vicuna_embeddings(model, tokenizer, text, layer_idx=-1, device='cuda' if torch.cuda.is_available() else 'cpu'):
+def extract_vicuna_embeddings(model, tokenizer, text, layer_idx=-1, device='cuda' if torch.cuda.is_available() else 'cpu', aggregation=None):
     """
     Extract embeddings from a specific layer of a Vicuna model for a single text input.
     
@@ -88,9 +88,10 @@ def extract_vicuna_embeddings(model, tokenizer, text, layer_idx=-1, device='cuda
         text: The input text to process
         layer_idx: The index of the layer to extract embeddings from (-1 for last layer)
         device: Device to run inference on
+        aggregation: Method to aggregate across all layers (None, "mean", "max", "concat")
         
     Returns:
-        Tensor of embeddings of shape [1, hidden_size]
+        Tensor of embeddings of shape [1, hidden_size] (or [1, hidden_size*num_layers] for "concat")
     """
     # Format the prompt for Vicuna
     formatted_text = format_vicuna_prompt(text)
@@ -108,17 +109,33 @@ def extract_vicuna_embeddings(model, tokenizer, text, layer_idx=-1, device='cuda
     # Get hidden states from all layers
     hidden_states = outputs.hidden_states
     
-    # Extract embeddings from the specified layer
-    # If layer_idx is -1, we get the last layer
-    layer_output = hidden_states[layer_idx]
+    # If aggregation is specified, use all layers
+    if aggregation:
+        # Skip first hidden state (embedding layer) and process only transformer layers
+        transformer_hidden_states = hidden_states[1:]  # Skip the initial embedding layer
+        
+        if aggregation == "mean":
+            # Mean across all layers - shape: [batch_size, sequence_length, hidden_size]
+            aggregated_output = torch.stack(transformer_hidden_states).mean(dim=0)
+            last_token_embedding = aggregated_output[0, -1, :]
+        elif aggregation == "max":
+            # Max across all layers - shape: [batch_size, sequence_length, hidden_size]
+            aggregated_output = torch.stack(transformer_hidden_states).max(dim=0)[0]
+            last_token_embedding = aggregated_output[0, -1, :]
+        elif aggregation == "concat":
+            # Concatenate the last token embedding from all layers
+            last_token_embeddings = [state[0, -1, :] for state in transformer_hidden_states]
+            last_token_embedding = torch.cat(last_token_embeddings, dim=0)
+        else:
+            raise ValueError(f"Unsupported aggregation method: {aggregation}")
+    else:
+        # Use the specified layer index (original behavior)
+        layer_output = hidden_states[layer_idx]
+        last_token_embedding = layer_output[0, -1, :]
     
-    # We typically use the embedding of the last token for classification
-    # Shape: [batch_size, sequence_length, hidden_size]
-    last_token_embedding = layer_output[0, -1, :]
-    
-    return last_token_embedding.unsqueeze(0)  # Shape: [1, hidden_size]
+    return last_token_embedding.unsqueeze(0)  # Shape: [1, hidden_size] or [1, hidden_size*num_layers]
 
-def extract_batched_embeddings(model, tokenizer, prompts, layer_idx=-1, device='cuda' if torch.cuda.is_available() else 'cpu'):
+def extract_batched_embeddings(model, tokenizer, prompts, layer_idx=-1, device='cuda' if torch.cuda.is_available() else 'cpu', aggregation=None):
     """
     Extract embeddings for a batch of prompts in a single forward pass from Vicuna model.
     
@@ -128,9 +145,10 @@ def extract_batched_embeddings(model, tokenizer, prompts, layer_idx=-1, device='
         prompts: List of prompt strings
         layer_idx: The index of the layer to extract embeddings from (-1 for last layer)
         device: Device to run inference on
+        aggregation: Method to aggregate across all layers (None, "mean", "max", "concat")
     
     Returns:
-        Batch of embeddings [batch_size, hidden_size]
+        Batch of embeddings [batch_size, hidden_size] (or [batch_size, hidden_size*num_layers] for "concat")
     """
     # Format prompts for Vicuna
     formatted_prompts = [format_vicuna_prompt(prompt) for prompt in prompts]
@@ -138,11 +156,37 @@ def extract_batched_embeddings(model, tokenizer, prompts, layer_idx=-1, device='
     inputs = tokenizer(formatted_prompts, return_tensors="pt", padding=True, truncation=True).to(device)
     with torch.no_grad():
         outputs = model(**inputs, output_hidden_states=True)
-    layer_output = outputs.hidden_states[layer_idx]  # [batch_size, seq_len, hidden_dim]
-    mean_embeddings = layer_output.mean(dim=1)       # Mean over tokens
+    
+    # Get hidden states from all layers
+    hidden_states = outputs.hidden_states
+    
+    # If aggregation is specified, use all layers
+    if aggregation:
+        # Skip first hidden state (embedding layer) and process only transformer layers
+        transformer_hidden_states = hidden_states[1:]  # Skip the initial embedding layer
+        
+        if aggregation == "mean":
+            # Mean across all layers
+            aggregated_output = torch.stack(transformer_hidden_states).mean(dim=0)
+            mean_embeddings = aggregated_output.mean(dim=1)  # Mean over tokens
+        elif aggregation == "max":
+            # Max across all layers
+            aggregated_output = torch.stack(transformer_hidden_states).max(dim=0)[0]
+            mean_embeddings = aggregated_output.mean(dim=1)  # Mean over tokens
+        elif aggregation == "concat":
+            # Concatenate the mean token embedding from each layer
+            mean_layer_embeddings = [state.mean(dim=1) for state in transformer_hidden_states]
+            mean_embeddings = torch.cat(mean_layer_embeddings, dim=1)
+        else:
+            raise ValueError(f"Unsupported aggregation method: {aggregation}")
+    else:
+        # Use the specified layer index (original behavior)
+        layer_output = hidden_states[layer_idx]
+        mean_embeddings = layer_output.mean(dim=1)  # Mean over tokens
+    
     return mean_embeddings
 
-def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_idx=-1):
+def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_idx=-1, aggregation=None):
     """
     Predict the number of remaining tokens in an LLM output sequence.
     
@@ -152,6 +196,7 @@ def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_idx=-1)
         tokenizer: The Vicuna tokenizer
         text: The input text to process
         layer_idx: The index of the layer to extract embeddings from
+        aggregation: Method to aggregate across all layers (None, "mean", "max", "concat")
         
     Returns:
         Predicted number of remaining tokens
@@ -162,7 +207,7 @@ def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_idx=-1)
     
     # Extract embeddings from Vicuna model
     device = next(model.parameters()).device
-    embeddings = extract_vicuna_embeddings(vicuna_model, tokenizer, text, layer_idx, device)
+    embeddings = extract_vicuna_embeddings(vicuna_model, tokenizer, text, layer_idx, device, aggregation)
     
     # Make prediction with the model
     with torch.no_grad():
@@ -307,7 +352,7 @@ def train_model(args):
     # Extract sample embedding to determine input dimension
     with torch.no_grad():
         sample_embedding = extract_batched_embeddings(
-            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device
+            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device, args.aggregation
         )
         input_dim = sample_embedding.shape[1]
         logger.info(f"Detected embedding dimension: {input_dim}")
@@ -357,7 +402,7 @@ def train_model(args):
             with autocast(enabled=args.use_amp):
                 with torch.no_grad():
                     embeddings = extract_batched_embeddings(
-                        vicuna_model, tokenizer, prompts, args.layer_idx, device
+                        vicuna_model, tokenizer, prompts, args.layer_idx, device, args.aggregation
                     )
                 
                 # Ensure embeddings are the same type as model parameters
@@ -406,7 +451,7 @@ def train_model(args):
                 # Extract embeddings from Vicuna model using raw prompts
                 with autocast(enabled=args.use_amp):
                     embeddings = extract_batched_embeddings(
-                        vicuna_model, tokenizer, prompts, args.layer_idx, device
+                        vicuna_model, tokenizer, prompts, args.layer_idx, device, args.aggregation
                     )
                     
                     # Ensure embeddings are the same type as model parameters
@@ -552,7 +597,7 @@ def evaluate(args):
     
     with torch.no_grad():
         sample_embedding = extract_batched_embeddings(
-            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device
+            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device, args.aggregation
         )
         input_dim = sample_embedding.shape[1]
         logger.info(f"Detected embedding dimension: {input_dim}")
@@ -586,7 +631,7 @@ def evaluate(args):
             # Extract embeddings from Vicuna model using raw prompts
             with autocast(enabled=args.use_amp):
                 embeddings = extract_batched_embeddings(
-                    vicuna_model, tokenizer, prompts, args.layer_idx, device
+                    vicuna_model, tokenizer, prompts, args.layer_idx, device, args.aggregation
                 )
                 
                 # Ensure embeddings are the same type as model parameters
@@ -738,6 +783,10 @@ if __name__ == '__main__':
                         help="Precision for Vicuna model")
     parser.add_argument("--use_amp", action="store_true",
                         help="Whether to use automatic mixed precision for training and inference")
+    
+    # Add aggregation argument
+    parser.add_argument("--aggregation", type=str, default=None, choices=[None, "mean", "max", "concat"],
+                        help="Method to aggregate embeddings across all layers (None uses single layer specified by layer_idx)")
     
     args = parser.parse_args()
     
