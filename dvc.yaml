@@ -21,7 +21,7 @@ stages:
       
   train_embeddings_predictors:
     foreach:
-      - { name: "single_layer", agg: null }
+      # - { name: "single_layer", agg: null }
       - { name: "mean_agg", agg: "mean" }
       - { name: "max_agg", agg: "max" }
       - { name: "concat_agg", agg: "concat" }
