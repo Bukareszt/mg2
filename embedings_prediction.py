@@ -12,6 +12,10 @@ from datasets import load_from_disk
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_linear_schedule_with_warmup
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import argparse
+import time
+import csv
+from logger import Logger  # Import the existing Logger class
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -220,30 +224,20 @@ def compute_metrics(preds, labels):
 
 def extract_dataset_info(data_dir):
     """
-    Extract dataset name and configuration from data directory path.
-    If the name contains 'preview' (like preview5/preview10), extract that info.
-    Otherwise, label it as 'normal'.
+    Extract dataset information from the data directory path.
     """
-    # Extract the base name without the path and suffixes
-    base_name = os.path.basename(data_dir)
-    
-    # Handle different path formats
-    if '/' in data_dir:
-        parts = data_dir.split('/')
-        if len(parts) >= 2:
-            base_name = parts[-1]  # Get the last part of the path
-    
-    # Check if "preview" is in the name and extract that info
-    if "preview" in base_name:
-        # Find the preview pattern (preview followed by numbers)
-        import re
-        preview_match = re.search(r'preview(\d+)', base_name)
-        if preview_match:
-            preview_count = preview_match.group(1)
-            return f"preview{preview_count}"
-    
-    # If no preview found, return "normal"
-    return "normal"
+    try:
+        # Extract the last part of the path
+        parts = data_dir.rstrip('/').split('/')
+        info = parts[-1]
+        
+        # Remove any leading "lmsys_" prefix
+        if info.startswith('lmsys_'):
+            info = info[len('lmsys_'):]
+            
+        return info
+    except:
+        return "unknown_dataset"
 
 def train_model(args):
     """Training function."""
@@ -251,6 +245,23 @@ def train_model(args):
     
     # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
+    
+    # Extract dataset info from data directory path
+    dataset_info = extract_dataset_info(args.data_dir)
+    
+    # Initialize wandb logger with model name that includes dataset info
+    config = vars(args)
+    # Add dataset info to config for better tracking
+    config['dataset_info'] = dataset_info
+    config['loss_type'] = "L1Loss"  # We're using L1Loss
+    
+    wandb_logger = Logger(
+        config=config,
+        model_name=f"embed-length-predictor-{args.vicuna_model_name.split('/')[-1]}-{dataset_info}",
+        project_name=args.wandb_project,
+        enable_logging=args.use_wandb,
+        log_model=args.log_model
+    )
     
     # Load dataset
     logger.info(f"Loading train dataset from {args.data_dir}_train")
@@ -323,10 +334,6 @@ def train_model(args):
     
     train_losses = []
     val_losses = []
-    
-    # Extract dataset info for logging
-    dataset_info = extract_dataset_info(args.data_dir)
-    logger.info(f"Training on dataset: {dataset_info}")
     
     for epoch in range(args.num_epochs):
         model.train()
@@ -408,66 +415,93 @@ def train_model(args):
                     
                     outputs = model(embeddings)
                 
-                # Convert outputs to float32 for loss calculation
-                if outputs.dtype != torch.float32:
-                    outputs = outputs.float()
-                
+                # Calculate loss
                 loss = criterion(outputs, labels)
                 
                 val_loss += loss.item()
                 val_preds.extend(outputs.cpu().numpy())
                 val_labels.extend(labels.cpu().numpy())
         
-        # Calculate validation metrics
+        # Calculate average validation loss and metrics
         avg_val_loss = val_loss / len(val_dataloader)
         val_losses.append(avg_val_loss)
         val_metrics = compute_metrics(val_preds, val_labels)
         
         # Log metrics
         logger.info(f"Epoch {epoch+1}/{args.num_epochs}:")
-        logger.info(f"  Train Loss (L1): {avg_train_loss:.4f}")
+        logger.info(f"  Train Loss: {avg_train_loss:.4f}")
         logger.info(f"  Train MAE: {train_metrics['mae']:.4f}")
         logger.info(f"  Train RMSE: {train_metrics['rmse']:.4f}")
         logger.info(f"  Train R²: {train_metrics['r2']:.4f}")
-        logger.info(f"  Val Loss (L1): {avg_val_loss:.4f}")
+        logger.info(f"  Val Loss: {avg_val_loss:.4f}")
         logger.info(f"  Val MAE: {val_metrics['mae']:.4f}")
         logger.info(f"  Val RMSE: {val_metrics['rmse']:.4f}")
         logger.info(f"  Val R²: {val_metrics['r2']:.4f}")
         
+        # Log metrics to wandb
+        if args.use_wandb:
+            wandb_metrics = {
+                "train/l1_loss": avg_train_loss,
+                "train/mae": train_metrics['mae'],
+                "train/rmse": train_metrics['rmse'],
+                "train/r2": train_metrics['r2'],
+                "val/l1_loss": avg_val_loss,
+                "val/mae": val_metrics['mae'],
+                "val/rmse": val_metrics['rmse'],
+                "val/r2": val_metrics['r2'],
+                "lr": optimizer.param_groups[0]['lr']
+            }
+            wandb_logger.log_metrics(wandb_metrics, step=epoch)
+        
         # Update learning rate based on validation loss
         lr_scheduler.step(avg_val_loss)
         
-        # Check if this is the best model so far
-        if avg_val_loss < best_val_loss - args.min_loss_improvement:
-            logger.info(f"Validation loss improved from {best_val_loss:.4f} to {avg_val_loss:.4f}")
+        # Early stopping check
+        if avg_val_loss + args.min_loss_improvement < best_val_loss:
+            logger.info(f"Validation loss decreased from {best_val_loss:.4f} to {avg_val_loss:.4f}. Saving model...")
             best_val_loss = avg_val_loss
             early_stop_counter = 0
             
             # Save the model
             checkpoint = {
-                'epoch': epoch + 1,
+                'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'val_loss': avg_val_loss,
-                'val_metrics': val_metrics,
-                'input_dim': input_dim,
-                'hidden_dim': args.hidden_dim
             }
             torch.save(checkpoint, os.path.join(args.output_dir, "best_model.pt"))
-            logger.info(f"Saved new best model to {os.path.join(args.output_dir, 'best_model.pt')}")
+            
+            # Log model to wandb
+            if args.use_wandb and args.log_model:
+                wandb_logger.log_model_checkpoint(
+                    model, 
+                    os.path.join(args.output_dir, "best_model.pt"),
+                    f"best_model_epoch_{epoch}"
+                )
         else:
             early_stop_counter += 1
-            logger.info(f"Validation loss did not improve. Early stopping counter: {early_stop_counter}/{early_stop_patience}")
+            logger.info(f"Validation loss did not decrease significantly. Early stopping counter: {early_stop_counter}/{early_stop_patience}")
             
             if early_stop_counter >= early_stop_patience:
                 logger.info(f"Early stopping triggered after {epoch+1} epochs")
                 break
     
-    # Load the best model for final evaluation
-    checkpoint = torch.load(os.path.join(args.output_dir, "best_model.pt"))
-    model.load_state_dict(checkpoint['model_state_dict'])
+    # Save the final model regardless of performance
+    checkpoint = {
+        'epoch': args.num_epochs - 1,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'val_loss': avg_val_loss,
+    }
+    torch.save(checkpoint, os.path.join(args.output_dir, "final_model.pt"))
     
-    return model, best_val_loss, checkpoint['val_metrics']
+    logger.info(f"Training completed. Best validation loss: {best_val_loss:.4f}")
+    
+    # Finish wandb logging
+    if args.use_wandb:
+        wandb_logger.finish()
+    
+    return best_val_loss
 
 def evaluate(args):
     """Evaluation function."""
@@ -482,10 +516,27 @@ def evaluate(args):
         batch_size=args.batch_size,
         pin_memory=True,
         num_workers=args.num_workers,
-        prefetch_factor=args.prefetch_factor if args.num_workers > 0 else False,
+        prefetch_factor=args.prefetch_factor if args.num_workers > 0 else None,
         persistent_workers=True if args.num_workers > 0 else False,
         collate_fn=custom_collate_fn
     )
+    
+    # Extract dataset info for logging
+    dataset_info = extract_dataset_info(args.data_dir)
+    
+    # Initialize wandb logger for evaluation
+    if args.use_wandb:
+        config = vars(args)
+        config['dataset_info'] = dataset_info
+        config['phase'] = 'evaluation'
+        
+        wandb_logger = Logger(
+            config=config,
+            model_name=f"eval-embed-predictor-{args.vicuna_model_name.split('/')[-1]}-{dataset_info}",
+            project_name=args.wandb_project,
+            enable_logging=args.use_wandb,
+            log_model=False
+        )
     
     # Load Vicuna model for embedding extraction
     logger.info("Loading Vicuna model for evaluation")
@@ -516,6 +567,9 @@ def evaluate(args):
     # Evaluation
     all_preds = []
     all_labels = []
+    evaluation_results = []
+    row_counter = 0
+    latencies = []
     
     # Also calculate L1 loss explicitly
     criterion = nn.L1Loss()
@@ -526,37 +580,99 @@ def evaluate(args):
             prompts = batch['prompt']
             labels = batch['labels'].float().to(device)
             
+            # Measure latency
+            start_time = time.time()
+            
             # Extract embeddings from Vicuna model using raw prompts
             with autocast(enabled=args.use_amp):
                 embeddings = extract_batched_embeddings(
                     vicuna_model, tokenizer, prompts, args.layer_idx, device
                 )
                 
+                # Ensure embeddings are the same type as model parameters
+                if next(model.parameters()).dtype != embeddings.dtype:
+                    embeddings = embeddings.to(next(model.parameters()).dtype)
+                
                 outputs = model(embeddings)
+            
+            end_time = time.time()
+            batch_latency = end_time - start_time
+            latencies.append(batch_latency)
             
             # Loss and predictions
             batch_loss = criterion(outputs.float(), labels.float()).item()
             l1_loss += batch_loss
             
-            all_preds.extend(outputs.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
+            batch_preds = outputs.cpu().numpy()
+            batch_labels = labels.cpu().numpy()
+            
+            # Record detailed results for each example
+            for i in range(len(batch_preds)):
+                evaluation_results.append({
+                    'row': row_counter,
+                    'actual_length': float(batch_labels[i]),
+                    'predicted_length': float(batch_preds[i]),
+                    'latency': float(batch_latency / len(batch_preds))
+                })
+                row_counter += 1
+            
+            all_preds.extend(batch_preds)
+            all_labels.extend(batch_labels)
     
     # Compute metrics
     metrics = compute_metrics(all_preds, all_labels)
     avg_l1_loss = l1_loss / len(test_dataloader)
     metrics['l1_loss'] = avg_l1_loss
     
+    # Calculate average latency
+    avg_latency = sum(latencies) / len(latencies)
+    metrics['avg_latency'] = avg_latency
+    
     logger.info("Test Metrics:")
     logger.info(f"  L1 Loss: {avg_l1_loss:.4f}")
     logger.info(f"  MAE: {metrics['mae']:.4f}")
     logger.info(f"  RMSE: {metrics['rmse']:.4f}")
     logger.info(f"  R²: {metrics['r2']:.4f}")
+    logger.info(f"  Avg Latency: {avg_latency:.4f} seconds")
+    
+    # Log test metrics to wandb
+    if args.use_wandb:
+        test_metrics = {
+            "test/l1_loss": avg_l1_loss,
+            "test/mae": metrics['mae'],
+            "test/mse": metrics['mse'],
+            "test/rmse": metrics['rmse'],
+            "test/r2": metrics['r2'],
+            "performance/avg_latency": avg_latency
+        }
+        wandb_logger.log_metrics(test_metrics)
+        
+        # Save evaluation results to file and log as artifact
+        output_path = os.path.join(args.output_dir, "evaluation_results.csv")
+        with open(output_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['row', 'actual_length', 'predicted_length', 'latency'])
+            for result in evaluation_results:
+                writer.writerow([
+                    result['row'],
+                    result['actual_length'],
+                    result['predicted_length'],
+                    result['latency']
+                ])
+        
+        # Use the logger to log the artifact
+        wandb_logger.log_artifact(
+            file_path=output_path, 
+            name="evaluation_results", 
+            artifact_type="eval_results"
+        )
+        
+        logger.info(f"Saved evaluation results to {output_path} and uploaded to wandb as artifact")
+        wandb_logger.finish()
     
     return metrics
 
 if __name__ == '__main__':
-    import argparse
-    
     parser = argparse.ArgumentParser()
     
     # Data arguments
@@ -596,6 +712,14 @@ if __name__ == '__main__':
                         help="Minimum validation loss improvement to consider as significant")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility")
+    
+    # Wandb logging arguments
+    parser.add_argument("--use_wandb", action="store_true",
+                        help="Whether to use Weights & Biases for logging")
+    parser.add_argument("--wandb_project", type=str, default="embeddings-length-predictor",
+                        help="Weights & Biases project name")
+    parser.add_argument("--log_model", action="store_true",
+                        help="Whether to log model checkpoints to W&B")
     
     # DataLoader optimization arguments
     parser.add_argument("--num_workers", type=int, default=4,

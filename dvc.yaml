@@ -26,6 +26,8 @@ stages:
       --output_dir results/lama_embeddings_predictor_0
       --do_train
       --do_eval
+      --use_wandb
+      --wandb_project output-length-prediction
 
   train_length_predictors:
     foreach:
