@@ -22,8 +22,8 @@ stages:
   train_embeddings_predictors:
     foreach:
       # - "mean"
-      # - "max"
-      - "concat"
+      - "max"
+      # - "concat"
     do:
       cmd: >
         python embedings_prediction.py
