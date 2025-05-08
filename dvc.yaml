@@ -85,7 +85,7 @@ stages:
       cmd: >
         python embedings_prediction_mean.py
         --data_dir data/lmsys_vicuna-13b_preview0_10K
-        --output_dir results/embeddings_predictor_${item.agg}_${item.layers}
+        --output_dir results/embeddings_predictor_${item.agg}
         --do_train
         --do_eval
         --use_wandb
