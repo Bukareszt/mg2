@@ -90,7 +90,7 @@ stages:
         --do_eval
         --use_wandb
         --wandb_project output-length-prediction
-        --layer_indices ${item.layers}
+        --layer_indices "${item.layers}"
         --aggregation ${item.agg}
         --batch_size 2
         --learning_rate 0.01

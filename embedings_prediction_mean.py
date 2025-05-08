@@ -204,7 +204,7 @@ def extract_batched_embeddings(model, tokenizer, prompts, layer_indices=None, de
         # Default: use the first specified layer index
         return hidden_states[layer_indices[0]].mean(dim=1)
 
-def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_idx=-1, aggregation=None):
+def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_indices=None, device=None, aggregation=None):
     """
     Predict the number of remaining tokens in an LLM output sequence.
     
@@ -213,8 +213,9 @@ def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_idx=-1,
         vicuna_model: The Vicuna model
         tokenizer: The Vicuna tokenizer
         text: The input text to process
-        layer_idx: The index of the layer to extract embeddings from
-        aggregation: Method to aggregate across all layers (None, "mean", "max", "concat")
+        layer_indices: List of layer indices to extract embeddings from (e.g., [1,2,3,4])
+        device: Device to run on (if None, will use the device of the model)
+        aggregation: Method to aggregate across specified layers ("concat", "mean", "learned_weighted_sum")
         
     Returns:
         Predicted number of remaining tokens
@@ -223,9 +224,12 @@ def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_idx=-1,
     model.eval()
     vicuna_model.eval()
     
+    # Determine device if not provided
+    if device is None:
+        device = next(model.parameters()).device
+    
     # Extract embeddings from Vicuna model
-    device = next(model.parameters()).device
-    embeddings = extract_vicuna_embeddings(vicuna_model, tokenizer, text, layer_idx, device, aggregation)
+    embeddings = extract_vicuna_embeddings(vicuna_model, tokenizer, text, layer_indices, device, aggregation)
     
     # Make prediction with the model
     with torch.no_grad():
@@ -647,9 +651,15 @@ def evaluate(args):
     sample_batch = next(iter(test_dataloader))
     sample_prompts = sample_batch['prompt'][:1]  # Just use the first prompt
     
+    # Convert layer_indices from string to list of integers if provided
+    layer_indices = None
+    if args.layer_indices:
+        layer_indices = [int(idx) for idx in args.layer_indices.strip('[]').split(',')]
+        logger.info(f"Using layer indices: {layer_indices}")
+    
     with torch.no_grad():
         sample_embedding = extract_batched_embeddings(
-            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device, args.aggregation
+            vicuna_model, tokenizer, sample_prompts, layer_indices, device, args.aggregation
         )
         input_dim = sample_embedding.shape[1]
         logger.info(f"Detected embedding dimension: {input_dim}")
@@ -679,7 +689,7 @@ def evaluate(args):
             # Extract embeddings from Vicuna model using raw prompts
             with autocast(enabled=args.use_amp):
                 embeddings = extract_batched_embeddings(
-                    vicuna_model, tokenizer, prompts, args.layer_idx, device, args.aggregation
+                    vicuna_model, tokenizer, prompts, layer_indices, device, args.aggregation
                 )
                 
                 # Ensure embeddings are the same type as model parameters
@@ -748,8 +758,14 @@ if __name__ == '__main__':
                         help="Dimension of hidden layer")
     parser.add_argument("--vicuna_model_name", type=str, default="lmsys/vicuna-13b-v1.3",
                         help="Name of Vicuna model to use for embedding extraction")
+    
+    # Deprecated: use layer_indices instead
     parser.add_argument("--layer_idx", type=int, default=-1,
-                        help="Index of Vicuna layer to extract embeddings from (-1 for last layer)")
+                        help="DEPRECATED: Use --layer_indices instead. Index of Vicuna layer to extract embeddings from.")
+    
+    # New parameter for multiple layer indices
+    parser.add_argument("--layer_indices", type=str, default=None,
+                        help="Comma-separated list of layer indices to use, e.g., '[1,2,3,4]'")
     
     # Training arguments
     parser.add_argument("--output_dir", type=str, default="./results",
@@ -801,10 +817,6 @@ if __name__ == '__main__':
     parser.add_argument("--aggregation", type=str, default="mean", 
                         choices=["mean", "concat", "learned_weighted_sum"],
                         help="Method to aggregate embeddings across specified layers")
-    
-    # Add layer_indices argument
-    parser.add_argument("--layer_indices", type=str, default=None,
-                        help="Comma-separated list of layer indices to use, e.g., '[1,2,3,4]'")
     
     args = parser.parse_args()
     
