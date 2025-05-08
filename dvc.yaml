@@ -70,3 +70,31 @@ stages:
         - lenght_prediction.py
         - models/BasicBert.py
 
+  train_embeddings_predictors_mean:
+    foreach:
+      - {layers: '[10, 11, 12]', agg: 'mean'}
+      - {layers: '[11, 12, 13]', agg: 'mean'}
+      - {layers: '[12, 13, 14]', agg: 'mean'}
+      - {layers: '[10, 11, 12]', agg: 'concat'}
+      - {layers: '[12, 13, 14]', agg: 'concat'}
+      - {layers: '[13, 14, 15]', agg: 'concat'}
+      - {layers: '[10, 11, 12]', agg: 'learned_weighted_sum'}
+      - {layers: '[11, 12, 13]', agg: 'learned_weighted_sum'}
+      - {layers: '[12, 13, 14]', agg: 'learned_weighted_sum'}
+    do:
+      cmd: >
+        python embedings_prediction_mean.py
+        --data_dir data/lmsys_vicuna-13b_preview0_10K
+        --output_dir results/embeddings_predictor_${item.agg}_${item.layers}
+        --do_train
+        --do_eval
+        --use_wandb
+        --wandb_project output-length-prediction
+        --layer_indices ${item.layers}
+        --aggregation ${item.agg}
+        --batch_size 2
+        --learning_rate 0.01
+        --num_epochs 30
+        --seed 42
+      deps:
+        - embedings_prediction_mean.py
