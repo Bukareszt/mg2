@@ -18,3 +18,4 @@ dvc
 dvc[s3]
 accelerate
 bitsandbytes
+flash-attn>=2.3.0
