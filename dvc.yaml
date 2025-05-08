@@ -39,7 +39,6 @@ stages:
         --use_wandb
         --wandb_project output-length-prediction
         --layer_idx ${item}
-        --use_flash_attention
 
   train_length_predictors:
     foreach:
