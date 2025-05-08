@@ -2,9 +2,9 @@ stages:
   preprocess:
     cmd: >
       python process_dataset.py 
-      --data_size 1000
+      --data_size 100
       --seed 42
-      --response_tokens_list 0,1,2,3,4,5
+      --response_tokens_list 0
     deps:
       - process_dataset.py
       
@@ -32,13 +32,14 @@ stages:
     do:
       cmd: >
         python embedings_prediction.py
-        --data_dir data/lmsys_vicuna-13b_preview0_10K
+        --data_dir data/lmsys_vicuna-13b_preview0_100K
         --output_dir results/embeddings_predictor_${item}
         --do_train
         --do_eval
         --use_wandb
         --wandb_project output-length-prediction
         --layer_idx ${item}
+        --flash_attention
 
   train_length_predictors:
     foreach:

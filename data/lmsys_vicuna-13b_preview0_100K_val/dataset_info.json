@@ -1,0 +1,91 @@
+{
+  "builder_name": "parquet",
+  "citation": "",
+  "config_name": "default",
+  "dataset_name": "lmsys-chat-1m",
+  "dataset_size": 2632115477,
+  "description": "",
+  "download_checksums": {
+    "hf://datasets/lmsys/lmsys-chat-1m@200748d9d3cddcc9d782887541057aca0b18c5da/data/train-00000-of-00006-4feeb3f83346a0e9.parquet": {
+      "num_bytes": 249303811,
+      "checksum": null
+    },
+    "hf://datasets/lmsys/lmsys-chat-1m@200748d9d3cddcc9d782887541057aca0b18c5da/data/train-00001-of-00006-4030672591c2f478.parquet": {
+      "num_bytes": 247222671,
+      "checksum": null
+    },
+    "hf://datasets/lmsys/lmsys-chat-1m@200748d9d3cddcc9d782887541057aca0b18c5da/data/train-00002-of-00006-1779b7cec9462180.parquet": {
+      "num_bytes": 249923890,
+      "checksum": null
+    },
+    "hf://datasets/lmsys/lmsys-chat-1m@200748d9d3cddcc9d782887541057aca0b18c5da/data/train-00003-of-00006-2fa862bfed56af1f.parquet": {
+      "num_bytes": 247173225,
+      "checksum": null
+    },
+    "hf://datasets/lmsys/lmsys-chat-1m@200748d9d3cddcc9d782887541057aca0b18c5da/data/train-00004-of-00006-18f4bdd50c103e71.parquet": {
+      "num_bytes": 246443273,
+      "checksum": null
+    },
+    "hf://datasets/lmsys/lmsys-chat-1m@200748d9d3cddcc9d782887541057aca0b18c5da/data/train-00005-of-00006-fe1acc5d10a9f0e2.parquet": {
+      "num_bytes": 248783380,
+      "checksum": null
+    }
+  },
+  "download_size": 1488850250,
+  "features": {
+    "prompt": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "labels": {
+      "dtype": "int64",
+      "_type": "Value"
+    },
+    "input_ids": {
+      "feature": {
+        "dtype": "int32",
+        "_type": "Value"
+      },
+      "_type": "Sequence"
+    },
+    "token_type_ids": {
+      "feature": {
+        "dtype": "int8",
+        "_type": "Value"
+      },
+      "_type": "Sequence"
+    },
+    "attention_mask": {
+      "feature": {
+        "dtype": "int8",
+        "_type": "Value"
+      },
+      "_type": "Sequence"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 4120965727,
+  "splits": {
+    "train": {
+      "name": "train",
+      "num_bytes": 2632115477,
+      "num_examples": 1000000,
+      "shard_lengths": [
+        186667,
+        192667,
+        190667,
+        194667,
+        188666,
+        46666
+      ],
+      "dataset_name": "lmsys-chat-1m"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}

@@ -7,6 +7,7 @@ from torch.cuda.amp import autocast, GradScaler  # Add imports for mixed precisi
 import numpy as np
 import os
 import logging
+import gc  # Add garbage collector for memory cleanup
 from tqdm import tqdm
 from datasets import load_from_disk
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_linear_schedule_with_warmup
@@ -23,6 +24,16 @@ logging.basicConfig(
     handlers=[logging.FileHandler("training.log"), logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
+
+def free_gpu_memory():
+    """
+    Free up GPU memory by forcing garbage collection and clearing CUDA cache.
+    """
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        logger.info(f"Cleared CUDA cache. Current memory allocated: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
 
 class TokenLengthPredictor(nn.Module):
     """
@@ -215,7 +226,7 @@ def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_idx=-1,
     
     return prediction.item()
 
-def load_vicuna_model(model_name="lmsys/vicuna-13b-v1.3", use_auth_token=None, precision="float16"):
+def load_vicuna_model(model_name="lmsys/vicuna-13b-v1.3", use_auth_token=None, precision="float16", use_flash_attention=True):
     """
     Load a Vicuna model and tokenizer.
     
@@ -223,6 +234,7 @@ def load_vicuna_model(model_name="lmsys/vicuna-13b-v1.3", use_auth_token=None, p
         model_name: The name of the model to load (default: lmsys/vicuna-13b-v1.3)
         use_auth_token: HuggingFace token for accessing gated models
         precision: Model precision - "float16", "bfloat16", or "float32"
+        use_flash_attention: Whether to use Flash Attention if available
         
     Returns:
         model, tokenizer
@@ -243,14 +255,54 @@ def load_vicuna_model(model_name="lmsys/vicuna-13b-v1.3", use_auth_token=None, p
         torch_dtype = torch.float32
         logger.info("Using Float32 precision")
     
+    # Set up Flash Attention configuration
+    attn_implementation = "flash_attention_2" if use_flash_attention else "eager"
+    if use_flash_attention:
+        try:
+            import transformers
+            if hasattr(transformers, "__version__"):
+                logger.info(f"Transformers version: {transformers.__version__}")
+                
+            # Check if Flash Attention is available
+            if hasattr(transformers, "utils") and hasattr(transformers.utils, "check_flash_attn_install"):
+                flash_available = transformers.utils.check_flash_attn_install()
+                if flash_available:
+                    logger.info("Flash Attention 2 is available and will be used")
+                else:
+                    logger.warning("Flash Attention not available. Will fall back to standard attention")
+                    attn_implementation = "eager"
+            else:
+                logger.warning("Could not verify Flash Attention availability. Will try to use it anyway")
+        except ImportError:
+            logger.warning("Could not verify Flash Attention availability. Will try to use it anyway")
+    
     # Load model with ability to output hidden states
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        use_auth_token=use_auth_token,
-        output_hidden_states=True,
-        torch_dtype=torch_dtype,  # Use specified precision
-        device_map="auto",        # Automatically distribute across available GPUs
-    )
+    try:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            use_auth_token=use_auth_token,
+            output_hidden_states=True,
+            torch_dtype=torch_dtype,  # Use specified precision
+            device_map="auto",        # Automatically distribute across available GPUs
+            attn_implementation=attn_implementation,  # Use Flash Attention if requested and available
+        )
+        
+        if use_flash_attention and attn_implementation == "flash_attention_2":
+            logger.info("Model loaded with Flash Attention 2")
+        
+    except TypeError as e:
+        if "unexpected keyword argument 'attn_implementation'" in str(e):
+            # Fall back to loading without Flash Attention if the model doesn't support it
+            logger.warning(f"Model does not support Flash Attention: {e}. Loading with standard attention.")
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                use_auth_token=use_auth_token,
+                output_hidden_states=True,
+                torch_dtype=torch_dtype,
+                device_map="auto",
+            )
+        else:
+            raise
     
     return model, tokenizer
 
@@ -286,6 +338,10 @@ def extract_dataset_info(data_dir):
 
 def train_model(args):
     """Training function."""
+    # Clear GPU memory before starting
+    free_gpu_memory()
+    logger.info("Starting training with clean memory state")
+    
     set_seed(args.seed)
     
     # Create output directory if it doesn't exist
@@ -339,7 +395,7 @@ def train_model(args):
     
     # Load Vicuna model for embedding extraction
     logger.info("Loading Vicuna model for training")
-    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision)
+    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision, args.use_flash_attention)
     vicuna_model.eval()  # Set model to evaluation mode for embedding extraction
     
     # Get a sample batch to determine embedding size
@@ -431,6 +487,9 @@ def train_model(args):
             # Collect predictions and labels for metric calculation
             train_preds.extend(outputs.detach().cpu().numpy())
             train_labels.extend(labels.cpu().numpy())
+        
+        # Free up memory after each epoch
+        free_gpu_memory()
         
         # Calculate average training loss and metrics
         avg_train_loss = train_loss / len(train_dataloader)
@@ -531,6 +590,10 @@ def train_model(args):
                 logger.info(f"Early stopping triggered after {epoch+1} epochs")
                 break
     
+    # Clean up at the end of training
+    logger.info("Training finished, cleaning up memory")
+    free_gpu_memory()
+    
     # Save the final model regardless of performance
     checkpoint = {
         'epoch': args.num_epochs - 1,
@@ -546,10 +609,18 @@ def train_model(args):
     if args.use_wandb:
         wandb_logger.finish()
     
+    # Final memory cleanup
+    del model, optimizer, vicuna_model, tokenizer, train_dataset, val_dataset, train_dataloader, val_dataloader
+    free_gpu_memory()
+    
     return best_val_loss
 
 def evaluate(args):
     """Evaluation function."""
+    # Clear GPU memory before evaluation
+    free_gpu_memory()
+    logger.info("Starting evaluation with clean memory state")
+    
     set_seed(args.seed)
     
     # Load test dataset
@@ -585,7 +656,7 @@ def evaluate(args):
     
     # Load Vicuna model for embedding extraction
     logger.info("Loading Vicuna model for evaluation")
-    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision)
+    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision, args.use_flash_attention)
     vicuna_model.eval()
     
     # Load the best model
@@ -636,7 +707,6 @@ def evaluate(args):
                 
                 outputs = model(embeddings)
             
-        
             # Loss and predictions
             batch_loss = criterion(outputs.float(), labels.float()).item()
             l1_loss += batch_loss
@@ -679,6 +749,11 @@ def evaluate(args):
         wandb_logger.log_metrics(test_metrics)
         
         wandb_logger.finish()
+    
+    # Clean up memory
+    logger.info("Evaluation finished, cleaning up memory")
+    del model, vicuna_model, tokenizer, test_dataset, test_dataloader
+    free_gpu_memory()
     
     return metrics
 
@@ -753,7 +828,14 @@ if __name__ == '__main__':
     parser.add_argument("--aggregation", type=str, default=None, choices=[None, "mean", "max", "concat"],
                         help="Method to aggregate embeddings across all layers (None uses single layer specified by layer_idx)")
     
+    # Flash Attention argument
+    parser.add_argument("--use_flash_attention", action="store_true",
+                        help="Whether to use Flash Attention for faster and memory-efficient attention computation")
+    
     args = parser.parse_args()
+    
+    # Clean CUDA memory at start
+    free_gpu_memory()
     
     # Check if using BFloat16 on a supported device
     if args.precision == "bfloat16" and (not torch.cuda.is_available() or not torch.cuda.is_bf16_supported()):
@@ -765,3 +847,7 @@ if __name__ == '__main__':
     
     if args.do_eval:
         evaluate(args)
+    
+    # Final cleanup
+    free_gpu_memory()
+    logger.info("Script execution completed")
