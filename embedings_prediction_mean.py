@@ -326,8 +326,7 @@ def train_model(args):
         config=config,
         model_name=f"embed-length-predictor-{args.vicuna_model_name.split('/')[-1]}-{dataset_info}",
         project_name=args.wandb_project,
-        enable_logging=args.use_wandb,
-        log_model=args.log_model
+        enable_logging=args.use_wandb
     )
     
     # Load dataset
@@ -572,13 +571,6 @@ def train_model(args):
             }
             torch.save(checkpoint, os.path.join(args.output_dir, "best_model.pt"))
             
-            # Log model to wandb
-            if args.use_wandb and args.log_model:
-                wandb_logger.log_model_checkpoint(
-                    model, 
-                    os.path.join(args.output_dir, "best_model.pt"),
-                    f"best_model_epoch_{epoch}"
-                )
         else:
             early_stop_counter += 1
             logger.info(f"Validation loss did not decrease significantly. Early stopping counter: {early_stop_counter}/{early_stop_patience}")
