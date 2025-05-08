@@ -237,7 +237,7 @@ def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_indices
     
     return prediction.item()
 
-def load_vicuna_model(model_name="lmsys/vicuna-13b-v1.3", use_auth_token=None, precision="float16"):
+def load_vicuna_model(model_name="lmsys/vicuna-13b-v1.3", precision="float16"):
     """
     Load a Vicuna model and tokenizer.
     
@@ -252,7 +252,7 @@ def load_vicuna_model(model_name="lmsys/vicuna-13b-v1.3", use_auth_token=None, p
     logger.info(f"Loading Vicuna model: {model_name} with precision {precision}")
     
     # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=use_auth_token, legacy=False)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, legacy=False)
     
     # Determine torch dtype based on precision argument
     if precision == "bfloat16" and torch.cuda.is_available() and torch.cuda.is_bf16_supported():
@@ -268,7 +268,6 @@ def load_vicuna_model(model_name="lmsys/vicuna-13b-v1.3", use_auth_token=None, p
     # Load model with ability to output hidden states
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        use_auth_token=use_auth_token,
         output_hidden_states=True,
         torch_dtype=torch_dtype,  # Use specified precision
         device_map="auto",        # Automatically distribute across available GPUs
@@ -360,7 +359,7 @@ def train_model(args):
     
     # Load Vicuna model for embedding extraction
     logger.info("Loading Vicuna model for training")
-    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision)
+    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.precision)
     vicuna_model.eval()  # Set model to evaluation mode for embedding extraction
     
     # Get a sample batch to determine embedding size
@@ -633,7 +632,7 @@ def evaluate(args):
     
     # Load Vicuna model for embedding extraction
     logger.info("Loading Vicuna model for evaluation")
-    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision)
+    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.precision)
     vicuna_model.eval()
     
     # Load the best model
