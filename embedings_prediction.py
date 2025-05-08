@@ -781,7 +781,7 @@ if __name__ == '__main__':
                         help="Directory to save model and results")
     parser.add_argument("--num_epochs", type=int, default=30,
                         help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=2,
+    parser.add_argument("--batch_size", type=int, default=1,
                         help="Batch size for training and evaluation")
     parser.add_argument("--learning_rate", type=float, default=0.01,
                         help="Learning rate for optimizer")
