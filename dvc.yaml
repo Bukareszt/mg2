@@ -92,7 +92,7 @@ stages:
         --wandb_project output-length-prediction
         --layer_indices "${item.layers}"
         --aggregation ${item.agg}
-        --batch_size 4
+        --batch_size 28
         --learning_rate 0.01
         --num_epochs 30
         --seed 42
