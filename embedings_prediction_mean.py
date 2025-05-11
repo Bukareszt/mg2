@@ -16,6 +16,15 @@ import time
 import csv
 from logger import Logger  # Import the existing Logger class
 
+# Clear CUDA memory at script start
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
+    logging.info("CUDA memory cleared at script start")
+    # Print GPU memory usage for debugging
+    allocated = torch.cuda.memory_allocated() / 1024**2
+    reserved = torch.cuda.memory_reserved() / 1024**2
+    logging.info(f"CUDA Memory: {allocated:.2f}MB allocated, {reserved:.2f}MB reserved")
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
