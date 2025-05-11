@@ -7,6 +7,7 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-gpu=4
 #SBATCH --mem=128G
+#SBATCH --gres=storage:lustre:100G
 
 srun python embedings_prediction_mean.py
         --data_dir data/lmsys_vicuna-13b_preview0_100K
