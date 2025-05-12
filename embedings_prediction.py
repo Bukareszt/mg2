@@ -406,7 +406,7 @@ def train_model(args):
     # Extract sample embedding to determine input dimension
     with torch.no_grad():
         sample_embedding = extract_batched_embeddings(
-            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device, args.aggregation
+            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device, None
         )
         input_dim = sample_embedding.shape[1]
         logger.info(f"Detected embedding dimension: {input_dim}")
@@ -456,7 +456,7 @@ def train_model(args):
             with autocast(enabled=args.use_amp):
                 with torch.no_grad():
                     embeddings = extract_batched_embeddings(
-                        vicuna_model, tokenizer, prompts, args.layer_idx, device, args.aggregation
+                        vicuna_model, tokenizer, prompts, args.layer_idx, device, None
                     )
                 
                 # Ensure embeddings are the same type as model parameters
@@ -505,7 +505,7 @@ def train_model(args):
                 # Extract embeddings from Vicuna model using raw prompts
                 with autocast(enabled=args.use_amp):
                     embeddings = extract_batched_embeddings(
-                        vicuna_model, tokenizer, prompts, args.layer_idx, device, args.aggregation
+                        vicuna_model, tokenizer, prompts, args.layer_idx, device, None
                     )
                     
                     # Ensure embeddings are the same type as model parameters
@@ -659,7 +659,7 @@ def evaluate(args):
     
     with torch.no_grad():
         sample_embedding = extract_batched_embeddings(
-            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device, args.aggregation
+            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device, None
         )
         input_dim = sample_embedding.shape[1]
         logger.info(f"Detected embedding dimension: {input_dim}")
@@ -689,7 +689,7 @@ def evaluate(args):
             # Extract embeddings from Vicuna model using raw prompts
             with autocast(enabled=args.use_amp):
                 embeddings = extract_batched_embeddings(
-                    vicuna_model, tokenizer, prompts, args.layer_idx, device, args.aggregation
+                    vicuna_model, tokenizer, prompts, args.layer_idx, device, None
                 )
                 
                 # Ensure embeddings are the same type as model parameters
