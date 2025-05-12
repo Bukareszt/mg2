@@ -661,10 +661,26 @@ def evaluate(args):
         sample_embedding = extract_batched_embeddings(
             vicuna_model, tokenizer, sample_prompts, layer_indices, device, args.aggregation
         )
-        input_dim = sample_embedding.shape[1]
+        
+        # Handle different return types based on aggregation method
+        if args.aggregation == "learned_weighted_sum":
+            # For learned_weighted_sum, get dimension from first layer embedding
+            input_dim = sample_embedding[0].shape[1]
+            num_layers = len(sample_embedding)
+        else:
+            # For mean or concat, dimension is the embedding dimension
+            input_dim = sample_embedding.shape[1]
+            num_layers = len(layer_indices) if layer_indices else 1
+            
         logger.info(f"Detected embedding dimension: {input_dim}")
     
-    model = TokenLengthPredictor(input_dim=input_dim, hidden_dim=args.hidden_dim)
+    # Initialize model with appropriate parameters
+    model = TokenLengthPredictor(
+        input_dim=input_dim, 
+        hidden_dim=args.hidden_dim,
+        aggregation=args.aggregation if args.aggregation == "learned_weighted_sum" else None,
+        num_layers=num_layers if args.aggregation == "learned_weighted_sum" else None
+    )
     
     checkpoint = torch.load(os.path.join(args.output_dir, "best_model.pt"), map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -693,12 +709,15 @@ def evaluate(args):
                 )
                 
                 # Ensure embeddings are the same type as model parameters
-                if next(model.parameters()).dtype != embeddings.dtype:
-                    embeddings = embeddings.to(next(model.parameters()).dtype)
+                if args.aggregation == "learned_weighted_sum":
+                    # For learned_weighted_sum, convert each embedding in the list
+                    embeddings = [emb.to(next(model.parameters()).dtype) for emb in embeddings]
+                else:
+                    if next(model.parameters()).dtype != embeddings.dtype:
+                        embeddings = embeddings.to(next(model.parameters()).dtype)
                 
                 outputs = model(embeddings)
             
-        
             # Loss and predictions
             batch_loss = criterion(outputs.float(), labels.float()).item()
             l1_loss += batch_loss
@@ -746,7 +765,6 @@ def evaluate(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    
     # Data arguments
     parser.add_argument("--data_dir", type=str, required=True, 
                         help="Path to the processed dataset (without _train, _val, _test suffix)")
