@@ -39,6 +39,7 @@ stages:
         --use_wandb
         --wandb_project output-length-prediction
         --layer_idx ${item}
+        --batch_size 15
 
   train_length_predictors:
     foreach:
