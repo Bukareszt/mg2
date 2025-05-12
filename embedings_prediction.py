@@ -356,7 +356,7 @@ def train_model(args):
     
     wandb_logger = Logger(
         config=config,
-        model_name=f"embed-length-predictor-{args.vicuna_model_name.split('/')[-1]}-{dataset_info}",
+        model_name=f"embedings_prediction-{args.vicuna_model_name.split('/')[-1]}-{dataset_info}",
         project_name=args.wandb_project,
         enable_logging=args.use_wandb,
         log_model=args.log_model
