@@ -226,7 +226,7 @@ def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_idx=-1,
     
     return prediction.item()
 
-def load_vicuna_model(model_name="lmsys/vicuna-13b-v1.3", use_auth_token=None, precision="float16", use_flash_attention=True):
+def load_vicuna_model(model_name="lmsys/vicuna-13b-v1.3", use_auth_token=None, precision="float16", use_flash_attention=False):
     """
     Load a Vicuna model and tokenizer.
     
@@ -393,7 +393,7 @@ def train_model(args):
     
     # Load Vicuna model for embedding extraction
     logger.info("Loading Vicuna model for training")
-    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision, args.use_flash_attention)
+    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision, False)
     vicuna_model.eval()  # Set model to evaluation mode for embedding extraction
     
     # Get a sample batch to determine embedding size
@@ -647,7 +647,7 @@ def evaluate(args):
     
     # Load Vicuna model for embedding extraction
     logger.info("Loading Vicuna model for evaluation")
-    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision, args.use_flash_attention)
+    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision, False)
     vicuna_model.eval()
     
     # Load the best model
