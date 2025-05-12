@@ -2,7 +2,7 @@ stages:
   preprocess:
     cmd: >
       python process_dataset.py 
-      --data_size 100
+      --data_size 50
       --seed 42
       --response_tokens_list 0
     deps:
@@ -51,7 +51,7 @@ stages:
     do:
       cmd: >
         python lenght_prediction.py
-        --data_dir data/lmsys_vicuna-13b_preview${item}_1000K
+        --data_dir data/lmsys_vicuna-13b_preview${item}_50K
         --model_name google-bert/bert-base-uncased
         --output_dir results/bert_length_predictor_${item}
         --num_epochs 40
@@ -84,7 +84,7 @@ stages:
     do:
       cmd: >
         python embedings_prediction_mean.py
-        --data_dir data/lmsys_vicuna-13b_preview0_100K
+        --data_dir data/lmsys_vicuna-13b_preview0_50K
         --output_dir results/embeddings_predictor_${item.agg}
         --do_train
         --do_eval
@@ -92,9 +92,10 @@ stages:
         --wandb_project output-length-prediction
         --layer_indices "${item.layers}"
         --aggregation ${item.agg}
-        --batch_size 15
+        --batch_size 25
         --learning_rate 0.01
         --num_epochs 30
         --seed 42
+        -- use_amp
       deps:
         - embedings_prediction_mean.py
