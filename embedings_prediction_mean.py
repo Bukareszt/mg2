@@ -332,7 +332,7 @@ def train_model(args):
     
     wandb_logger = Logger(
         config=config,
-        model_name=f"embeddings-length-predictor-agg-{args.vicuna_model_name.split('/')[-1]}-{dataset_info}",
+        model_name=f"embeddings-length-predictor-agg",
         project_name=args.wandb_project,
         enable_logging=args.use_wandb
     )
@@ -633,7 +633,7 @@ def evaluate(args):
         
         wandb_logger = Logger(
             config=config,
-            model_name=f"eval-embed-predictor-{args.vicuna_model_name.split('/')[-1]}-{dataset_info}",
+            model_name=f"eval-embed-predictor-agg",
             project_name=args.wandb_project,
             enable_logging=args.use_wandb,
             log_model=False
@@ -758,11 +758,7 @@ if __name__ == '__main__':
                         help="Dimension of hidden layer")
     parser.add_argument("--vicuna_model_name", type=str, default="lmsys/vicuna-13b-v1.3",
                         help="Name of Vicuna model to use for embedding extraction")
-    
-    # Deprecated: use layer_indices instead
-    parser.add_argument("--layer_idx", type=int, default=-1,
-                        help="DEPRECATED: Use --layer_indices instead. Index of Vicuna layer to extract embeddings from.")
-    
+
     # New parameter for multiple layer indices
     parser.add_argument("--layer_indices", type=str, default=None,
                         help="Comma-separated list of layer indices to use, e.g., '[1,2,3,4]'")
