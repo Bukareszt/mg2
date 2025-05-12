@@ -338,8 +338,6 @@ def extract_dataset_info(data_dir):
 
 def train_model(args):
     """Training function."""
-    # Clear GPU memory before starting
-    free_gpu_memory()
     logger.info("Starting training with clean memory state")
     
     set_seed(args.seed)
@@ -488,9 +486,6 @@ def train_model(args):
             train_preds.extend(outputs.detach().cpu().numpy())
             train_labels.extend(labels.cpu().numpy())
         
-        # Free up memory after each epoch
-        free_gpu_memory()
-        
         # Calculate average training loss and metrics
         avg_train_loss = train_loss / len(train_dataloader)
         train_losses.append(avg_train_loss)
@@ -592,7 +587,6 @@ def train_model(args):
     
     # Clean up at the end of training
     logger.info("Training finished, cleaning up memory")
-    free_gpu_memory()
     
     # Save the final model regardless of performance
     checkpoint = {
@@ -611,14 +605,11 @@ def train_model(args):
     
     # Final memory cleanup
     del model, optimizer, vicuna_model, tokenizer, train_dataset, val_dataset, train_dataloader, val_dataloader
-    free_gpu_memory()
     
     return best_val_loss
 
 def evaluate(args):
     """Evaluation function."""
-    # Clear GPU memory before evaluation
-    free_gpu_memory()
     logger.info("Starting evaluation with clean memory state")
     
     set_seed(args.seed)
@@ -753,7 +744,6 @@ def evaluate(args):
     # Clean up memory
     logger.info("Evaluation finished, cleaning up memory")
     del model, vicuna_model, tokenizer, test_dataset, test_dataloader
-    free_gpu_memory()
     
     return metrics
 
@@ -824,14 +814,6 @@ if __name__ == '__main__':
     parser.add_argument("--use_amp", action="store_true",
                         help="Whether to use automatic mixed precision for training and inference")
     
-    # Add aggregation argument
-    parser.add_argument("--aggregation", type=str, default=None, choices=[None, "mean", "max", "concat"],
-                        help="Method to aggregate embeddings across all layers (None uses single layer specified by layer_idx)")
-    
-    # Flash Attention argument
-    parser.add_argument("--use_flash_attention", action="store_true",
-                        help="Whether to use Flash Attention for faster and memory-efficient attention computation")
-    
     args = parser.parse_args()
     
     # Clean CUDA memory at start
@@ -848,6 +830,4 @@ if __name__ == '__main__':
     if args.do_eval:
         evaluate(args)
     
-    # Final cleanup
-    free_gpu_memory()
     logger.info("Script execution completed")
