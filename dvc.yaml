@@ -96,6 +96,6 @@ stages:
         --learning_rate 0.01
         --num_epochs 30
         --seed 42
-        -- use_amp
+        --use_amp
       deps:
         - embedings_prediction_mean.py
