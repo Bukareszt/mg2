@@ -41,7 +41,8 @@ class Logger:
             project=project_name,
             name=run_name,
             config=config,
-            reinit=True
+            reinit=True,
+            group='final'
         )
     
     def log_hyperparams(self, hyperparams):
