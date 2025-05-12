@@ -73,7 +73,6 @@ stages:
 
   train_embeddings_predictors_mean:
     foreach:
-      - {layers: '[10, 11, 12]', agg: 'mean'}
       - {layers: '[11, 12, 13]', agg: 'mean'}
       - {layers: '[12, 13, 14]', agg: 'mean'}
       - {layers: '[10, 11, 12]', agg: 'concat'}
