@@ -90,6 +90,7 @@ stages:
 
   train_embeddings_predictors_mean:
     foreach:
+      - {layers: '[10, 11, 12]', agg: 'mean'}
       - {layers: '[11, 12, 13]', agg: 'mean'}
       - {layers: '[12, 13, 14]', agg: 'mean'}
       - {layers: '[10, 11, 12]', agg: 'concat'}
@@ -109,7 +110,7 @@ stages:
         --wandb_project output-length-prediction
         --layer_indices "${item.layers}"
         --aggregation ${item.agg}
-        --batch_size 15
+        --batch_size 10
         --learning_rate 0.01
         --num_epochs 30
         --seed 42
