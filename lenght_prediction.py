@@ -115,7 +115,7 @@ def train(args):
     
     wandb_logger = Logger(
         config=config,
-        model_name=f"bert-length-predictor-{args.model_name.split('/')[-1]}-{dataset_info}",
+        model_name=f"bert-length-predictor",
         project_name=args.wandb_project,
         enable_logging=args.use_wandb,
         log_model=args.log_model
@@ -380,23 +380,8 @@ def evaluate(args):
     model.to(device)
     model.eval()
     
-    # Comment out Vicuna model loading
-    # vicuna_model_name = "lmsys/vicuna-13b-v1.3"
-    # bert_tokenizer = AutoTokenizer.from_pretrained(args.model_name, use_fast=False)
-    # Load tokenizer and model
-    # vicuna_tokenizer = AutoTokenizer.from_pretrained(vicuna_model_name, use_fast=False)
-    # vicuna_model = AutoModelForCausalLM.from_pretrained(
-    #        vicuna_model_name,
-    #        device_map="auto",  # Automatically distributes across available GPUs
-    #        load_in_4bit=True,  # If using bitsandbytes (low memory footprint)
-    #        torch_dtype=torch.float16,  # Optional depending on GPU
-    # )
-    # vicuna_model.eval()
-    
-    # Evaluation
     all_preds = []
     all_labels = []
-    latencies = []  # Track latency for each batch
     evaluation_results = []  # Store results for output file
     
     # Also calculate L1 loss explicitly
@@ -410,35 +395,10 @@ def evaluate(args):
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].float().to(device)
-
-            # Comment out step-by-step token generation
-            # prompts = batch['prompt']  # List[str], one prompt per sample
-            # Step-by-step token generation for full batch
-            # extended_prompts = generate_step_by_step_batch(
-            #     model=vicuna_model,
-            #     tokenizer=vicuna_tokenizer,
-            #     prompts=prompts,
-            #     steps=args.max_gen_tokens
-            # )
-
-            # Tokenize all new prompts at once with BERT tokenizer
-            # bert_tokenized = bert_tokenizer(
-            #     extended_prompts,
-            #     return_tensors="pt",
-            #     padding="max_length",
-            #     truncation=True,
-            #     max_length=512
-            # ).to(device)
-
-            start_time = time.time()
-            # Use the input_ids and attention_mask directly from the batch
             outputs = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask
             )
-            end_time = time.time()
-            batch_latency = end_time - start_time
-
             # Round outputs for integer predictions
             rounded_outputs = torch.round(outputs)
             
@@ -453,29 +413,23 @@ def evaluate(args):
                 evaluation_results.append({
                     'row': row_counter,
                     'actual_length': float(batch_labels[i]),
-                    'predicted_length': float(batch_preds[i]),
-                    'latency': float(batch_latency / len(batch_preds))
+                    'predicted_length': float(batch_preds[i])
                 })
                 row_counter += 1
 
             all_preds.extend(batch_preds)
             all_labels.extend(batch_labels)
-            latencies.append(batch_latency)
     
     metrics = compute_metrics(all_preds, all_labels)
     avg_l1_loss = l1_loss / len(test_dataloader)
     metrics['l1_loss'] = avg_l1_loss
     
-    # Calculate average latency
-    avg_latency = sum(latencies) / len(latencies)
-    metrics['avg_latency'] = avg_latency
     
     logger.info("Test Metrics:")
     logger.info(f"  L1 Loss: {avg_l1_loss:.4f}")
     logger.info(f"  MAE: {metrics['mae']:.4f}")
     logger.info(f"  RMSE: {metrics['rmse']:.4f}")
     logger.info(f"  R²: {metrics['r2']:.4f}")
-    logger.info(f"  Avg Latency: {avg_latency:.4f} seconds")
     
     # Log test metrics to wandb
     if args.use_wandb:
@@ -485,7 +439,6 @@ def evaluate(args):
             "test/mse": metrics['mse'],
             "test/rmse": metrics['rmse'],
             "test/r2": metrics['r2'],
-            "performance/avg_latency": avg_latency
         }
         wandb_logger.log_metrics(test_metrics)
         

@@ -71,6 +71,26 @@ stages:
         - lenght_prediction.py
         - models/BasicBert.py
 
+  evaluate_length_predictors:
+    foreach:
+      - 0
+    do:
+      cmd: >
+        python lenght_prediction.py
+        --data_dir data/lmsys_vicuna-13b_preview${item}_10K
+        --model_name google-bert/bert-base-uncased
+        --output_dir results/bert_length_predictor_${item}
+        --batch_size 32
+        --seed 42
+        --use_wandb
+        --wandb_project output-length-prediction-eval
+        --do_eval
+        --max_gen_tokens ${item}
+      deps:
+        - lenght_prediction.py
+        - models/BasicBert.py
+        - results/bert_length_predictor_${item}/best_model.pt
+
   train_embeddings_predictors_mean:
     foreach:
       - {layers: '[11, 12, 13]', agg: 'mean'}
@@ -78,9 +98,9 @@ stages:
       - {layers: '[10, 11, 12]', agg: 'concat'}
       - {layers: '[12, 13, 14]', agg: 'concat'}
       - {layers: '[13, 14, 15]', agg: 'concat'}
-      - {layers: '[10, 11, 12]', agg: 'learned_weighted_sum'}
-      - {layers: '[11, 12, 13]', agg: 'learned_weighted_sum'}
-      - {layers: '[12, 13, 14]', agg: 'learned_weighted_sum'}
+      # - {layers: '[10, 11, 12]', agg: 'learned_weighted_sum'}
+      # - {layers: '[11, 12, 13]', agg: 'learned_weighted_sum'}
+      # - {layers: '[12, 13, 14]', agg: 'learned_weighted_sum'}
     do:
       cmd: >
         python embedings_prediction_mean.py
