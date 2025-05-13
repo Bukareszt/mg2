@@ -195,14 +195,14 @@ def train(args):
             optimizer.zero_grad()
             
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            rounded_outputs = torch.round(outputs)
-            loss = criterion(rounded_outputs, torch.round(labels))
+            loss = criterion(outputs, torch.round(labels))
             
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
             
             optimizer.step()
             scheduler.step()
+
             
             epoch_loss += loss.item()
             progress_bar.set_postfix({"training_loss": f"{loss.item():.4f}"})
@@ -224,8 +224,7 @@ def train(args):
                 labels = batch['labels'].float().to(device)
                 
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-                rounded_outputs = torch.round(outputs)
-                loss = criterion(rounded_outputs, torch.round(labels))
+                loss = criterion(outputs, torch.round(labels))
                 
                 val_loss += loss.item()
                 
@@ -399,14 +398,12 @@ def evaluate(args):
                 input_ids=input_ids,
                 attention_mask=attention_mask
             )
-            # Round outputs for integer predictions
-            rounded_outputs = torch.round(outputs)
-            
+
             # Loss and predictions
-            batch_loss = criterion(rounded_outputs, torch.round(labels)).item()
+            batch_loss = criterion(outputs, torch.round(labels)).item()
             l1_loss += batch_loss
 
-            batch_preds = rounded_outputs.view(-1).cpu().numpy()
+            batch_preds = outputs.view(-1).cpu().numpy()
             batch_labels = labels.view(-1).cpu().numpy()
 
             for i in range(len(batch_preds)):
