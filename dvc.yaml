@@ -71,7 +71,7 @@ stages:
         - lenght_prediction.py
         - models/BasicBert.py
 
-  evaluate_length_predictors:
+  train_bert_length_predictors:
     foreach:
       - 0
     do:
@@ -83,9 +83,8 @@ stages:
         --batch_size 32
         --seed 42
         --use_wandb
-        --wandb_project output-length-prediction-eval
+        --wandb_project output-length-prediction
         --do_eval
-        --max_gen_tokens ${item}
       deps:
         - lenght_prediction.py
         - models/BasicBert.py
