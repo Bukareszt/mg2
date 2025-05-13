@@ -11,7 +11,7 @@ class EmbeddingExtractor:
         max_length=512, 
         num_bins=10, 
         device=None,
-        layer_range=(8, 16)
+        layer_range=(8, 9)
     ):
         self.model_name = model_name
         self.max_length = max_length
