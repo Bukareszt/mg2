@@ -7,14 +7,13 @@ from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from datasets import load_from_disk
-from transformers import get_linear_schedule_with_warmup, AutoTokenizer, AutoModelForCausalLM
+from transformers import get_linear_schedule_with_warmup
 from models.BasicBert import BasicBertForRegression
 import logging
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from logger import Logger
-import time  # Add import for timing
 import csv
 logging.basicConfig(
     level=logging.INFO,
@@ -153,7 +152,7 @@ def train(args):
     
     model = get_model(args)
     model.to(device)
-
+    
     # Define optimizer and scheduler
     optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     
@@ -202,7 +201,6 @@ def train(args):
             
             optimizer.step()
             scheduler.step()
-
             
             epoch_loss += loss.item()
             progress_bar.set_postfix({"training_loss": f"{loss.item():.4f}"})
@@ -212,7 +210,6 @@ def train(args):
         
         # Validation
         model.eval()
-
         val_loss = 0
         all_preds = []
         all_labels = []
@@ -312,27 +309,6 @@ def train(args):
     
     return model, best_val_loss, metrics
 
-def generate_step_by_step_batch(model, tokenizer, prompts: list[str], steps: int) -> list[str]:
-    """
-    Generates tokens step-by-step for a batch of prompts.
-    Returns list of final texts (prompt + generated tokens).
-    """
-    device = next(model.parameters()).device
-    generated_texts = prompts[:]
-    
-    for _ in range(steps):
-        inputs = tokenizer(generated_texts, return_tensors="pt", padding=True, truncation=True).to(device)
-        outputs = model(**inputs)
-        next_token_logits = outputs.logits[:, -1, :]
-        next_token_ids = torch.argmax(next_token_logits, dim=-1)
-        new_tokens = tokenizer.batch_decode(next_token_ids, skip_special_tokens=True)
-
-        # Append new tokens to current texts
-        generated_texts = [txt + token for txt, token in zip(generated_texts, new_tokens)]
-
-    return generated_texts
-
-
 def evaluate(args):
     """Evaluation function."""
     set_seed(args.seed)
@@ -362,7 +338,7 @@ def evaluate(args):
     
     test_dataloader = DataLoader(
         test_dataset, 
-        batch_size=args.batch_size,  # Use the same batch size as training
+        batch_size=args.batch_size,
         pin_memory=True,
         num_workers=args.num_workers,
         prefetch_factor=args.prefetch_factor,
@@ -379,6 +355,7 @@ def evaluate(args):
     model.to(device)
     model.eval()
     
+    # Evaluation
     all_preds = []
     all_labels = []
     evaluation_results = []  # Store results for output file
@@ -394,18 +371,18 @@ def evaluate(args):
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].float().to(device)
-            outputs = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask
-            )
-
-            # Loss and predictions
+            
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            
+            # Calculate L1 loss
             batch_loss = criterion(outputs, labels).item()
             l1_loss += batch_loss
-
+            
+            # Get predictions and labels as numpy arrays
             batch_preds = outputs.view(-1).cpu().numpy()
             batch_labels = labels.view(-1).cpu().numpy()
-
+            
+            # Record results with row number, actual length, predicted length
             for i in range(len(batch_preds)):
                 evaluation_results.append({
                     'row': row_counter,
@@ -413,14 +390,13 @@ def evaluate(args):
                     'predicted_length': float(batch_preds[i])
                 })
                 row_counter += 1
-
+            
             all_preds.extend(batch_preds)
             all_labels.extend(batch_labels)
     
     metrics = compute_metrics(all_preds, all_labels)
     avg_l1_loss = l1_loss / len(test_dataloader)
     metrics['l1_loss'] = avg_l1_loss
-    
     
     logger.info("Test Metrics:")
     logger.info(f"  L1 Loss: {avg_l1_loss:.4f}")
@@ -435,7 +411,7 @@ def evaluate(args):
             "test/mae": metrics['mae'],
             "test/mse": metrics['mse'],
             "test/rmse": metrics['rmse'],
-            "test/r2": metrics['r2'],
+            "test/r2": metrics['r2']
         }
         wandb_logger.log_metrics(test_metrics)
         
@@ -448,7 +424,7 @@ def evaluate(args):
                 writer.writerow([
                     result['row'],
                     result['actual_length'],
-                    result['predicted_length'],
+                    result['predicted_length']
                 ])
         
         # Use the logger to log the artifact instead of direct wandb API
@@ -480,20 +456,18 @@ def main():
                        help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=16,
                        help="Batch size for training and evaluation")
-    parser.add_argument("--learning_rate", type=float, default=0.01,
-                        help="Learning rate for optimizer")
+    parser.add_argument("--learning_rate", type=float, default=1e-5 ,
+                       help="Learning rate for optimizer")
     parser.add_argument("--weight_decay", type=float, default=0.01,
-                        help="Weight decay for regularization")
+                       help="Weight decay for regularization")
     parser.add_argument("--warmup_ratio", type=float, default=0.1,
-                        help="Ratio of warmup steps for learning rate scheduler")
+                       help="Ratio of warmup steps for learning rate scheduler")
     parser.add_argument("--max_grad_norm", type=float, default=1.0,
-                        help="Maximum gradient norm for gradient clipping")
+                       help="Maximum gradient norm for gradient clipping")
     parser.add_argument("--early_stopping_patience", type=int, default=5,
-                        help="Number of epochs with no improvement after which training will be stopped")
-    parser.add_argument("--min_loss_improvement", type=float, default=0.01,
-                        help="Minimum validation loss improvement to consider as significant")
+                       help="Number of epochs with no improvement after which training will be stopped")
     parser.add_argument("--seed", type=int, default=42,
-                        help="Random seed for reproducibility")
+                       help="Random seed for reproducibility")
     
     # Wandb logging arguments
     parser.add_argument("--use_wandb", action="store_true",
@@ -517,6 +491,9 @@ def main():
     parser.add_argument("--prefetch_factor", type=int, default=2,
                        help="Number of batches loaded in advance by each worker")
     
+    # Add minimal loss improvement threshold argument
+    parser.add_argument("--min_loss_improvement", type=float, default=1,
+                       help="Minimum validation loss improvement to consider as significant")
     
     args = parser.parse_args()
     
