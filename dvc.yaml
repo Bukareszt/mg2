@@ -157,3 +157,28 @@ stages:
     deps:
       - generate_dataset.py
         
+  train_embeddings_predictors_trail:
+    foreach:
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+    do:
+      cmd: >
+        python embedings_prediction2.py
+        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers.pt
+        --layer_name ${item}
+        --output_dir results/embeddings_predictor_trail_${item}
+        --use_wandb
+        --do_train
+        --do_eval
+        --batch_size 15
+        --learning_rate 1e-5
+        --num_epochs 30
+        --seed 42
+        --use_amp
