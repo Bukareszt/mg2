@@ -73,8 +73,7 @@ class EmbeddingExtractor:
             self.logger.info("Loading model...")
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name, 
-                output_hidden_states=True,
-                torch_dtype=torch.float16 if use_half_precision else None
+                output_hidden_states=True
             ).to(self.device)
             self.model.eval()
             self.logger.info("Model and tokenizer loaded successfully")
