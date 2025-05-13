@@ -195,7 +195,7 @@ def train(args):
             optimizer.zero_grad()
             
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            loss = criterion(outputs, torch.round(labels))
+            loss = criterion(outputs, labels)
             
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
@@ -224,7 +224,7 @@ def train(args):
                 labels = batch['labels'].float().to(device)
                 
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-                loss = criterion(outputs, torch.round(labels))
+                loss = criterion(outputs, labels)
                 
                 val_loss += loss.item()
                 
@@ -400,7 +400,7 @@ def evaluate(args):
             )
 
             # Loss and predictions
-            batch_loss = criterion(outputs, torch.round(labels)).item()
+            batch_loss = criterion(outputs, labels).item()
             l1_loss += batch_loss
 
             batch_preds = outputs.view(-1).cpu().numpy()
