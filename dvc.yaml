@@ -85,10 +85,6 @@ stages:
         --use_wandb
         --wandb_project output-length-prediction
         --do_eval
-      deps:
-        - lenght_prediction.py
-        - models/BasicBert.py
-        - results/bert_length_predictor_${item}/best_model.pt
 
   train_embeddings_predictors_mean:
     foreach:
