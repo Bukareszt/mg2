@@ -443,13 +443,12 @@ def evaluate(args):
         output_path = os.path.join(args.output_dir, "evaluation_results.csv")
         with open(output_path, 'w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(['row', 'actual_length', 'predicted_length', 'latency'])
+            writer.writerow(['row', 'actual_length', 'predicted_length'])
             for result in evaluation_results:
                 writer.writerow([
                     result['row'],
                     result['actual_length'],
                     result['predicted_length'],
-                    result['latency']
                 ])
         
         # Use the logger to log the artifact instead of direct wandb API

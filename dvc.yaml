@@ -74,8 +74,6 @@ stages:
   train_bert_length_predictors:
     foreach:
       - 10
-      - 50
-      - 100
     do:
       cmd: >
         python lenght_prediction.py
