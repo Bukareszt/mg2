@@ -73,11 +73,13 @@ stages:
 
   train_bert_length_predictors:
     foreach:
-      - 0
+      - 10
+      - 50
+      - 100
     do:
       cmd: >
         python lenght_prediction.py
-        --data_dir data/lmsys_vicuna-13b_preview${item}_10K
+        --data_dir data/lmsys_vicuna-13b_preview0_{item}K
         --model_name google-bert/bert-base-uncased
         --output_dir results/bert_length_predictor_${item}
         --batch_size 10
