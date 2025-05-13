@@ -65,34 +65,34 @@ class EmbeddingExtractor:
                 embedding = hidden_states[layer_idx][0][input_ids.shape[1] + i]
                 layer_embeddings[f"layer_{layer_idx}"].append(embedding.detach().cpu())
 
-def process_dataset(self, dataset_name, split="train[:1000]", output_file="trail_dataset_all_layers.pt", batch_size=4):
-    ds = load_dataset(dataset_name, split=split)
-    all_layer_embeddings = defaultdict(list)
-    all_labels = []
+    def process_dataset(self, dataset_name, split="train[:1000]", output_file="trail_dataset_all_layers.pt", batch_size=4):
+        ds = load_dataset(dataset_name, split=split)
+        all_layer_embeddings = defaultdict(list)
+        all_labels = []
 
-    batch = []
-    for idx, example in enumerate(ds):
-        prompt = example["text"]
-        batch.append(prompt)
+        batch = []
+        for idx, example in enumerate(ds):
+            prompt = example["text"]
+            batch.append(prompt)
 
-        if len(batch) == batch_size or idx == len(ds) - 1:
-            for prompt_text in batch:
-                try:
-                    layer_embs, labels = self.extract_embeddings_and_labels(prompt_text)
-                    for layer_key, embs in layer_embs.items():
-                        all_layer_embeddings[layer_key].extend(embs)
-                    all_labels.extend(labels)
-                except Exception as e:
-                    print(f"Skipped: {e}")
-            batch = []
+            if len(batch) == batch_size or idx == len(ds) - 1:
+                for prompt_text in batch:
+                    try:
+                        layer_embs, labels = self.extract_embeddings_and_labels(prompt_text)
+                        for layer_key, embs in layer_embs.items():
+                            all_layer_embeddings[layer_key].extend(embs)
+                        all_labels.extend(labels)
+                    except Exception as e:
+                        print(f"Skipped: {e}")
+                batch = []
 
-    saved_data = {key: torch.stack(val) for key, val in all_layer_embeddings.items()}
-    saved_data["labels"] = torch.tensor(all_labels)
-    torch.save(saved_data, output_file)
+        saved_data = {key: torch.stack(val) for key, val in all_layer_embeddings.items()}
+        saved_data["labels"] = torch.tensor(all_labels)
+        torch.save(saved_data, output_file)
 
-    print(f"\n✅ Dataset saved to {output_file}")
-    print(f"🔢 Total examples: {len(all_labels)}")
-    print(f"🧠 Layers saved: {list(all_layer_embeddings.keys())}")
+        print(f"\n✅ Dataset saved to {output_file}")
+        print(f"🔢 Total examples: {len(all_labels)}")
+        print(f"🧠 Layers saved: {list(all_layer_embeddings.keys())}")
 
 
 def main():
