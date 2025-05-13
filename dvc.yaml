@@ -152,7 +152,7 @@ stages:
       --max_length 512
       --num_bins 10
       --dataset tatsu-lab/alpaca
-      --split train[:10000]
+      --split train[:1000]
       --output data/trail_dataset_layers.pt
     deps:
       - generate_dataset.py
