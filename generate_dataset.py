@@ -32,8 +32,17 @@ class EmbeddingExtractor:
         return torch.bucketize(torch.tensor([length]), self.bin_edges)[0] - 1
 
     def extract_embeddings_and_labels(self, prompt_text):
-        inputs = self.tokenizer(prompt_text, return_tensors="pt").to(self.device)
+        inputs = self.tokenizer(
+            prompt_text, 
+            return_tensors="pt", 
+            padding=True,
+            truncation=True,
+            max_length=self.max_length,
+            return_attention_mask=True
+        ).to(self.device)
+
         input_ids = inputs["input_ids"]
+        attention_mask = inputs["attention_mask"]
         output_length = self.max_length - input_ids.shape[1]
 
         if output_length <= 0:
@@ -41,29 +50,35 @@ class EmbeddingExtractor:
 
         generated = self.model.generate(
             input_ids=input_ids,
+            attention_mask=attention_mask,
             max_new_tokens=output_length,
             return_dict_in_generate=True,
-            output_hidden_states=True
+            output_hidden_states=True,
+            pad_token_id=self.tokenizer.pad_token_id
         )
 
         hidden_states = generated.hidden_states  # Tuple: [num_layers+1][batch, seq_len, dim]
-
         layer_embeddings = defaultdict(list)
         labels = []
 
         full_seq_len = generated.sequences.shape[1]
         gen_len = full_seq_len - input_ids.shape[1]
 
-        # Check if hidden states contain enough tokens
         for i in range(gen_len):
             remaining = gen_len - i - 1
             bin_id = self.bin_remaining_length(remaining)
             labels.append(bin_id)
 
+            token_pos = input_ids.shape[1] + i
             for layer_idx in range(*self.layer_range):
-                # Hidden states[layer_idx] shape: [1, full_seq_len, dim]
-                embedding = hidden_states[layer_idx][0][input_ids.shape[1] + i]
-                layer_embeddings[f"layer_{layer_idx}"].append(embedding.detach().cpu())
+                # Prevent out-of-bounds access
+                if token_pos < hidden_states[layer_idx].shape[1]:
+                    embedding = hidden_states[layer_idx][0][token_pos]
+                    layer_embeddings[f"layer_{layer_idx}"].append(embedding.detach().cpu())
+                else:
+                    print(f"⚠️ Skipped token position {token_pos} for layer {layer_idx} (out of bounds)")
+
+        return layer_embeddings, labels
 
     def process_dataset(self, dataset_name, split="train[:1000]", output_file="trail_dataset_all_layers.pt", batch_size=4):
         ds = load_dataset(dataset_name, split=split)
