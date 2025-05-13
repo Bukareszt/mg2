@@ -13,8 +13,6 @@ from datasets import load_from_disk
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_linear_schedule_with_warmup
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import argparse
-import time
-import csv
 from logger import Logger  # Import the existing Logger class
 
 # Set up logging
