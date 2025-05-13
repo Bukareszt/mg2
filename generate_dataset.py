@@ -48,21 +48,30 @@ class EmbeddingExtractor:
         if output_length <= 0:
             raise ValueError(f"Prompt too long ({input_ids.shape[1]} tokens), skipping.")
 
-        generated = self.model.generate(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            max_new_tokens=output_length,
-            return_dict_in_generate=True,
-            output_hidden_states=True,
-            pad_token_id=self.tokenizer.pad_token_id
-        )
+        with torch.no_grad():
+            generated = self.model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=output_length,
+                return_dict_in_generate=True,
+                pad_token_id=self.tokenizer.pad_token_id
+            )
 
-        hidden_states = generated.hidden_states  # Tuple: [num_layers+1][batch, seq_len, dim]
+            full_input = generated.sequences  # [1, prompt + gen]
+            full_attention_mask = (full_input != self.tokenizer.pad_token_id).long()
+
+            # Run full forward pass to get hidden states
+            outputs = self.model(
+                input_ids=full_input,
+                attention_mask=full_attention_mask,
+                output_hidden_states=True
+            )
+            hidden_states = outputs.hidden_states  # tuple of (num_layers+1) x [1, seq_len, hidden_size]
+
         layer_embeddings = defaultdict(list)
         labels = []
 
-        full_seq_len = generated.sequences.shape[1]
-        gen_len = full_seq_len - input_ids.shape[1]
+        gen_len = full_input.shape[1] - input_ids.shape[1]
 
         for i in range(gen_len):
             remaining = gen_len - i - 1
@@ -71,7 +80,6 @@ class EmbeddingExtractor:
 
             token_pos = input_ids.shape[1] + i
             for layer_idx in range(*self.layer_range):
-                # Prevent out-of-bounds access
                 if token_pos < hidden_states[layer_idx].shape[1]:
                     embedding = hidden_states[layer_idx][0][token_pos]
                     layer_embeddings[f"layer_{layer_idx}"].append(embedding.detach().cpu())
@@ -79,6 +87,7 @@ class EmbeddingExtractor:
                     print(f"⚠️ Skipped token position {token_pos} for layer {layer_idx} (out of bounds)")
 
         return layer_embeddings, labels
+
 
     def process_dataset(self, dataset_name, split="train[:1000]", output_file="trail_dataset_all_layers.pt", batch_size=4):
         ds = load_dataset(dataset_name, split=split)
