@@ -773,7 +773,7 @@ if __name__ == '__main__':
                         help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=3,
                         help="Batch size for training and evaluation")
-    parser.add_argument("--learning_rate", type=float, default=0.01,
+    parser.add_argument("--learning_rate", type=float, default=1e-5,
                         help="Learning rate for optimizer")
     parser.add_argument("--weight_decay", type=float, default=0.01,
                         help="Weight decay for regularization")
