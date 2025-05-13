@@ -85,7 +85,7 @@ stages:
         --use_wandb
         --wandb_project output-length-prediction
         --do_eval
-        --do_tra
+        --do_train
 
   train_embeddings_predictors_mean:
     foreach:

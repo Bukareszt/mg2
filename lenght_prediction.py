@@ -480,22 +480,24 @@ def main():
     # Training arguments
     parser.add_argument("--output_dir", type=str, default="./results",
                        help="Directory to save model and results")
-    parser.add_argument("--num_epochs", type=int, default=10,
+    parser.add_argument("--num_epochs", type=int, default=30,
                        help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=16,
                        help="Batch size for training and evaluation")
-    parser.add_argument("--learning_rate", type=float, default=1e-5 ,
-                       help="Learning rate for optimizer")
+    parser.add_argument("--learning_rate", type=float, default=0.01,
+                        help="Learning rate for optimizer")
     parser.add_argument("--weight_decay", type=float, default=0.01,
-                       help="Weight decay for regularization")
+                        help="Weight decay for regularization")
     parser.add_argument("--warmup_ratio", type=float, default=0.1,
-                       help="Ratio of warmup steps for learning rate scheduler")
+                        help="Ratio of warmup steps for learning rate scheduler")
     parser.add_argument("--max_grad_norm", type=float, default=1.0,
-                       help="Maximum gradient norm for gradient clipping")
+                        help="Maximum gradient norm for gradient clipping")
     parser.add_argument("--early_stopping_patience", type=int, default=5,
-                       help="Number of epochs with no improvement after which training will be stopped")
+                        help="Number of epochs with no improvement after which training will be stopped")
+    parser.add_argument("--min_loss_improvement", type=float, default=0.01,
+                        help="Minimum validation loss improvement to consider as significant")
     parser.add_argument("--seed", type=int, default=42,
-                       help="Random seed for reproducibility")
+                        help="Random seed for reproducibility")
     
     # Wandb logging arguments
     parser.add_argument("--use_wandb", action="store_true",
