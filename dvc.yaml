@@ -145,15 +145,15 @@ stages:
       deps:
         - attention_prediction.py
 
-generate_trail_dataset:
-  cmd: >
-    python generate_dataset.py
-    --model meta-llama/Meta-Llama-3-8B-Instruct
-    --max_length 512
-    --num_bins 10
-    --dataset tatsu-lab/alpaca
-    --split train[:10000]
-    --output data/trail_dataset_layers.pt
-  deps:
-    - generate_dataset.py
-      
+  generate_trail_dataset:
+    cmd: >
+      python generate_dataset.py
+      --model meta-llama/Meta-Llama-3-8B-Instruct
+      --max_length 512
+      --num_bins 10
+      --dataset tatsu-lab/alpaca
+      --split train[:10000]
+      --output data/trail_dataset_layers.pt
+    deps:
+      - generate_dataset.py
+        
