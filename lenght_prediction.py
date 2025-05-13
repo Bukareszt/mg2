@@ -521,10 +521,6 @@ def main():
     parser.add_argument("--prefetch_factor", type=int, default=2,
                        help="Number of batches loaded in advance by each worker")
     
-    # Add minimal loss improvement threshold argument
-    parser.add_argument("--min_loss_improvement", type=float, default=1,
-                       help="Minimum validation loss improvement to consider as significant")
-
     
     args = parser.parse_args()
     
