@@ -153,7 +153,7 @@ stages:
       --num_bins 10
       --dataset tatsu-lab/alpaca
       --split train[:1000]
-      --output data/trail_dataset_layers.pt
+      --output /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers.pt
     deps:
       - generate_dataset.py
         
