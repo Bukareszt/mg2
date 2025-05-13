@@ -111,7 +111,7 @@ stages:
         --layer_indices "${item.layers}"
         --aggregation ${item.agg}
         --batch_size 10
-        --learning_rate 0.01
+        --learning_rate 1e-5
         --num_epochs 30
         --seed 42
         --use_amp
