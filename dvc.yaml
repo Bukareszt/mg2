@@ -97,9 +97,9 @@ stages:
       cmd: >
         python graph_regressor.py
         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
-        --layer_name "${item.layer}"
+        --layer_name ${item.layer}
         --threshold 0.9
-        --output_dir results/graph_regressor_${item}
+        --output_dir results/graph_regressor_${item.layer}
         --do_train
         --do_eval
         --batch_size 16
