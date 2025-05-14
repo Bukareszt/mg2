@@ -133,8 +133,8 @@ def train(model, loader, optimizer, loss_fn, device, scaler, use_amp=False, max_
         pbar.set_postfix({"loss": loss.item()})
         
         # Collect predictions and labels
-        preds.extend(out.detach().cpu().numpy())
-        labels_list.extend(batch.y.cpu().numpy())
+        preds.extend(out.detach().cpu().reshape(-1).numpy())
+        labels_list.extend(batch.y.cpu().reshape(-1).numpy())
     
     # Calculate metrics
     metrics = compute_metrics(preds, labels_list)
@@ -156,8 +156,9 @@ def evaluate(model, loader, loss_fn, device, use_amp=False):
                 loss = loss_fn(out, batch.y)
             
             total_loss += loss.item()
-            preds.extend(out.cpu().numpy())
-            labels_list.extend(batch.y.cpu().numpy())
+            preds.extend(out.cpu().reshape(-1).numpy())
+            labels_list.extend(batch.y.cpu().reshape(-1).numpy())
+    
     
     # Calculate metrics
     metrics = compute_metrics(preds, labels_list)
