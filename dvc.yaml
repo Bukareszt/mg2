@@ -159,15 +159,15 @@ stages:
         
   train_embeddings_predictors_trail:
     foreach:
-      - 8
-      - 9
-      - 10
-      - 11
-      - 12
-      - 13
-      - 14
-      - 15
-      - 16
+      - 'layer_8'
+      - 'layer_9'
+      - 'layer_10'
+      - 'layer_11'
+      - 'layer_12'
+      - 'layer_13'
+      - 'layer_14'
+      - 'layer_15'
+      - 'layer_16'
     do:
       cmd: >
         python embedings_prediction2.py
