@@ -314,8 +314,6 @@ def train_model(args):
                 
                 # Calculate loss
                 # print 10 random values of outputs and labels
-                print(outputs[0:10])
-                print(labels[0:10])
                 loss = criterion(outputs, labels)
                 
                 val_loss += loss.item()

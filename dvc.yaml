@@ -15,7 +15,7 @@ stages:
         --wandb_project output-length-prediction
         --do_eval
         --do_train
-        
+
   generate_trail_dataset:
     cmd: >
       python generate_dataset.py
@@ -47,7 +47,7 @@ stages:
         --use_wandb
         --do_train
         --do_eval
-        --batch_size 15
+        --batch_size 50
         --learning_rate 1e-5
         --num_epochs 30
         --seed 42
