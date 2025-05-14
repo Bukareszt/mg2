@@ -37,7 +37,6 @@ stages:
       - 'layer_13'
       - 'layer_14'
       - 'layer_15'
-      - 'layer_16'
     do:
       cmd: >
         python embedings_prediction2.py
@@ -87,15 +86,13 @@ stages:
 
   train_graph_regressors:
     foreach:
-      - 'layer_8'
-      - 'layer_9'
-      - 'layer_10'
-      - 'layer_11'
-      - 'layer_12'
-      - 'layer_13'
-      - 'layer_14'
-      - 'layer_15'
-      - 'layer_16'
+      - {layer: 'layer_10', max_seq_len: 5, threshold: 0.9}
+      - {layer: 'layer_11', max_seq_len: 5, threshold: 0.9}
+      - {layer: 'layer_12', max_seq_len: 5, threshold: 0.9}
+      - {layer: 'layer_13', max_seq_len: 5, threshold: 0.9}
+      - {layer: 'layer_14', max_seq_len: 5, threshold: 0.9}
+      - {layer: 'layer_15', max_seq_len: 5, threshold: 0.9}
+      - {layer: 'layer_16', max_seq_len: 5, threshold: 0.9}
     do:
       cmd: >
         python graph_regressor.py
@@ -109,6 +106,56 @@ stages:
         --learning_rate 1e-3
         --num_epochs 30
         --hidden_dim 128
+        --seed 42
+        --use_amp
+        --num_workers 4
+      deps:
+        - graph_regressor.py
+
+  # Add this to test different thresholds for graph construction
+  train_graph_regressors_thresholds:
+    foreach:
+      - {layer: 'layer_13', threshold: 0.85}
+      - {layer: 'layer_13', threshold: 0.9}
+      - {layer: 'layer_13', threshold: 0.95}
+    do:
+      cmd: >
+        python graph_regressor.py
+        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+        --layer_name ${item.layer}
+        --threshold ${item.threshold}
+        --output_dir results/graph_regressor_${item.layer}_thresh${item.threshold}
+        --do_train
+        --do_eval
+        --batch_size 16
+        --learning_rate 1e-3
+        --num_epochs 30
+        --hidden_dim 128
+        --seed 42
+        --use_amp
+        --num_workers 4
+      deps:
+        - graph_regressor.py
+
+  # Add a multi-layer graph regressor experiment
+  train_graph_regressors_multi:
+    foreach:
+      - {layers: ['layer_10', 'layer_13'], name: 'layer_10_13'}
+      - {layers: ['layer_11', 'layer_13'], name: 'layer_11_13'}
+      - {layers: ['layer_12', 'layer_13', 'layer_14'], name: 'layer_12_13_14'}
+    do:
+      cmd: >
+        python graph_regressor.py
+        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+        --layer_name ${item.layers[0]}
+        --threshold 0.9
+        --output_dir results/graph_regressor_${item.name}
+        --do_train
+        --do_eval
+        --batch_size 16
+        --learning_rate 1e-3
+        --hidden_dim 256
+        --num_epochs 30
         --seed 42
         --use_amp
         --num_workers 4

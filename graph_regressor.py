@@ -44,27 +44,34 @@ def set_seed(seed):
 
 
 class HiddenStatesGraphDataset(InMemoryDataset):
-    def __init__(self, embeddings, lengths, threshold=0.9):
+    def __init__(self, embeddings, lengths, threshold=0.9, max_seq_len=None):
         super().__init__()
-        self.data_list = self._build_graphs(embeddings, lengths, threshold)
+        self.data_list = self._build_graphs(embeddings, lengths, threshold, max_seq_len)
 
-    def _build_graphs(self, embeddings, lengths, threshold):
+    def _build_graphs(self, embeddings, lengths, threshold, max_seq_len):
         graphs = []
         i = 0
         while i < len(lengths):
             seq = []
+            original_length = 0
             while i < len(lengths) and lengths[i] != 0:
                 seq.append(embeddings[i])
+                original_length += 1
                 i += 1
-            if i < len(lengths):  # add last token with 0
+            if i < len(lengths):
                 seq.append(embeddings[i])
+                original_length += 1
                 i += 1
 
             if len(seq) < 2:
                 continue
 
+            # Cut sequence to max_seq_len if set
+            if max_seq_len is not None:
+                seq = seq[:max_seq_len]
+
             x = torch.stack(seq)
-            y = torch.tensor([len(seq)], dtype=torch.float)  # total generation length
+            y = torch.tensor([original_length], dtype=torch.float)  # target is full sequence length
 
             sim = cosine_similarity(x.numpy())
             edge_index = []
@@ -73,7 +80,7 @@ class HiddenStatesGraphDataset(InMemoryDataset):
                     if a != b and sim[a, b] > threshold:
                         edge_index.append([a, b])
             if not edge_index:
-                edge_index = [[i, i+1] for i in range(len(x)-1)]
+                edge_index = [[i, i + 1] for i in range(len(x) - 1)]
 
             edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
             graphs.append(Data(x=x, edge_index=edge_index, y=y))
@@ -213,26 +220,22 @@ def split_dataset(dataset, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, see
     return train_dataset, val_dataset, test_dataset
 
 
-def load_dataset(path, layer, threshold=0.9):
-    """
-    Load the dataset from a .pt file and create a graph dataset.
-    """
+def load_dataset(path, layer, threshold=0.9, max_seq_len=None):
     logger.info(f"🔄 Loading data from {path}...")
     data = torch.load(path)
-    
-    # Check if the specified layer exists in the dataset
+
     if layer not in data:
         available_layers = [key for key in data.keys() if key != "labels"]
         raise ValueError(f"Layer '{layer}' not found in the dataset. Available layers: {available_layers}")
-    
-    embeddings = data[layer]      # shape: [N, D]
-    labels = data["labels"]       # shape: [N]
 
-    logger.info(f"Creating graph dataset with threshold {threshold}...")
-    dataset = HiddenStatesGraphDataset(embeddings, labels, threshold)
+    embeddings = data[layer]
+    labels = data["labels"]
+
+    logger.info(f"Creating graph dataset with threshold {threshold} and max_seq_len={max_seq_len}...")
+    dataset = HiddenStatesGraphDataset(embeddings, labels, threshold, max_seq_len)
     logger.info(f"Created dataset with {len(dataset)} graphs")
-    
     return dataset
+
 
 
 def train_model(args):
@@ -248,7 +251,7 @@ def train_model(args):
     os.makedirs(args.output_dir, exist_ok=True)
     
     # Load dataset and create graph dataset
-    dataset = load_dataset(args.data_path, args.layer_name, args.threshold)
+    dataset = load_dataset(args.data_path, args.layer_name, args.threshold, args.max_seq_len)
     
     # Split dataset
     train_dataset, val_dataset, test_dataset = split_dataset(
@@ -386,7 +389,7 @@ def evaluate_model(args):
     set_seed(args.seed)
     
     # Load dataset and create graph dataset
-    dataset = load_dataset(args.data_path, args.layer_name, args.threshold)
+    dataset = load_dataset(args.data_path, args.layer_name, args.threshold, args.max_seq_len)
     
     # Split dataset
     _, _, test_dataset = split_dataset(
@@ -497,6 +500,9 @@ def main():
     # Precision arguments
     parser.add_argument("--use_amp", action="store_true",
                         help="Whether to use automatic mixed precision for training and inference")
+    
+    parser.add_argument("--max_seq_len", type=int, default=5,
+                    help="Maximum number of tokens used per input sequence")
     
     args = parser.parse_args()
     
