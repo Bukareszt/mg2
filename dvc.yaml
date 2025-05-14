@@ -65,7 +65,7 @@ stages:
       - {layers: 'layer_11 layer_12 layer_13', agg: 'concat'}
       - {layers: 'layer_12 layer_13 layer_14', agg: 'concat'}
       - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'concat'}
-      - {layers: 'layer_8 layer_12 layer_16', agg: 'concat'}
+      - {layers: 'layer_8 layer_12 layer_15', agg: 'concat'}
     do:
       cmd: >
         python embedings_prediction.py
