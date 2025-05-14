@@ -150,7 +150,6 @@ stages:
       python generate_dataset.py
       --model meta-llama/Meta-Llama-3-8B-Instruct
       --max_length 512
-      --num_bins 10
       --dataset tatsu-lab/alpaca
       --split train[:1000]
       --output /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers.pt
