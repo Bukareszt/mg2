@@ -152,7 +152,7 @@ stages:
       --max_length 512
       --dataset tatsu-lab/alpaca
       --split train[:1000]
-      --output /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers.pt
+      --output /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
     deps:
       - generate_dataset.py
         
@@ -170,7 +170,7 @@ stages:
     do:
       cmd: >
         python embedings_prediction2.py
-        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers.pt
+        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
         --layer_name ${item}
         --output_dir results/embeddings_predictor_trail_${item}
         --use_wandb
