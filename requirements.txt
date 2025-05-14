@@ -18,3 +18,4 @@ dvc
 dvc[s3]
 accelerate
 bitsandbytes
+torch_geometric

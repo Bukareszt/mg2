@@ -181,3 +181,65 @@ stages:
         --num_epochs 30
         --seed 42
         --use_amp
+
+  train_embeddings_predictors_agg:
+    foreach:
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'mean'}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'mean'}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'mean'}
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'sum'}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'sum'}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'sum'}
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'concat'}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'concat'}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'concat'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'concat'}
+      - {layers: 'layer_8 layer_12 layer_16', agg: 'concat'}
+    do:
+      cmd: >
+        python embedings_prediction.py
+        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+        --layers ${item.layers}
+        --aggregation ${item.agg}
+        --output_dir results/embeddings_predictor_${item.agg}_${item.layers}
+        --do_train
+        --do_eval
+        --use_wandb
+        --wandb_project output-length-prediction
+        --batch_size 15
+        --learning_rate 1e-5
+        --num_epochs 30
+        --seed 42
+        --use_amp
+      deps:
+        - embedings_prediction.py
+
+  train_graph_regressors:
+    foreach:
+      - 'layer_8'
+      - 'layer_9'
+      - 'layer_10'
+      - 'layer_11'
+      - 'layer_12'
+      - 'layer_13'
+      - 'layer_14'
+      - 'layer_15'
+      - 'layer_16'
+    do:
+      cmd: >
+        python graph_regressor.py
+        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+        --layer_name ${item}
+        --threshold 0.9
+        --output_dir results/graph_regressor_${item}
+        --do_train
+        --do_eval
+        --batch_size 16
+        --learning_rate 1e-3
+        --num_epochs 30
+        --hidden_dim 128
+        --seed 42
+        --use_amp
+        --num_workers 4
+      deps:
+        - graph_regressor.py

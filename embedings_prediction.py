@@ -1,19 +1,17 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau
-from torch.cuda.amp import autocast, GradScaler  # Add imports for mixed precision
+from torch.utils.data import Dataset, DataLoader, TensorDataset
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.cuda.amp import autocast, GradScaler
 import numpy as np
 import os
 import logging
-import gc  # Add garbage collector for memory cleanup
+import gc
 from tqdm import tqdm
-from datasets import load_from_disk
-from transformers import AutoModelForCausalLM, AutoTokenizer, get_linear_schedule_with_warmup
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import argparse
-from logger import Logger  # Import the existing Logger class
+from logger import Logger
 
 # Set up logging
 logging.basicConfig(
@@ -36,10 +34,10 @@ def free_gpu_memory():
 class TokenLengthPredictor(nn.Module):
     """
     A simple MLP regressor that predicts the number of remaining tokens in an LLM output sequence.
-    Input: Embedding vector of shape [4096] from a transformer layer
+    Input: Embedding vector from a transformer layer
     Output: A single scalar value representing the predicted token length
     """
-    def __init__(self, input_dim=4096, hidden_dim=512):
+    def __init__(self, input_dim, hidden_dim=512):
         super(TokenLengthPredictor, self).__init__()
         self.layer1 = nn.Linear(input_dim, hidden_dim)
         self.relu = nn.ReLU()
@@ -57,252 +55,31 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
 
+class PreExtractedEmbeddingDataset(Dataset):
+    """
+    Dataset class for pre-extracted embeddings and their corresponding labels.
+    """
+    def __init__(self, embeddings, labels):
+        self.embeddings = embeddings
+        self.labels = labels
+    
+    def __len__(self):
+        return len(self.labels)
+    
+    def __getitem__(self, idx):
+        return {
+            "embedding": self.embeddings[idx],
+            "label": self.labels[idx]
+        }
+
 def custom_collate_fn(batch):
     """
-    Custom collate function to handle varying tensor sizes in the dataset.
+    Custom collate function to handle the dataset.
     """
-    # Sort batch by label length (descending order)
-    batch_by_keys = {
-        key: [d[key] for d in batch] for key in batch[0].keys()
-    }
+    embeddings = torch.stack([item["embedding"] for item in batch])
+    labels = torch.tensor([item["label"] for item in batch], dtype=torch.float)
     
-    # For labels, we need to ensure they're all the same shape
-    if 'labels' in batch_by_keys:
-        # Convert to list if it's a tensor
-        labels = [label.item() if isinstance(label, torch.Tensor) and label.numel() == 1 
-                  else label for label in batch_by_keys['labels']]
-        batch_by_keys['labels'] = torch.tensor(labels, dtype=torch.float)
-    
-    # For raw prompts, we just need a list of strings
-    if 'prompt' in batch_by_keys:
-        # No processing needed for string prompts
-        pass
-        
-    return batch_by_keys
-
-def format_vicuna_prompt(text):
-    """Format a prompt for Vicuna models"""
-    # Vicuna uses a different format than LLaMA-3
-    # For most Vicuna models, the format is:
-    # "USER: {user_message}\nASSISTANT:"
-    return f"USER: {text}\nASSISTANT:"
-
-def extract_vicuna_embeddings(model, tokenizer, text, layer_idx=-1, device='cuda' if torch.cuda.is_available() else 'cpu', aggregation=None):
-    """
-    Extract embeddings from a specific layer of a Vicuna model for a single text input.
-    
-    Args:
-        model: The Vicuna model
-        tokenizer: The Vicuna tokenizer
-        text: The input text to process
-        layer_idx: The index of the layer to extract embeddings from (-1 for last layer)
-        device: Device to run inference on
-        aggregation: Method to aggregate across all layers (None, "mean", "max", "concat")
-        
-    Returns:
-        Tensor of embeddings of shape [1, hidden_size] (or [1, hidden_size*num_layers] for "concat")
-    """
-    # Format the prompt for Vicuna
-    formatted_text = format_vicuna_prompt(text)
-    
-    # Move model to the specified device if not already there
-    model = model.to(device)
-    
-    # Tokenize input text
-    inputs = tokenizer(formatted_text, return_tensors="pt").to(device)
-    
-    # Run forward pass with output_hidden_states=True to get hidden states
-    with torch.no_grad():
-        outputs = model(**inputs, output_hidden_states=True)
-    
-    # Get hidden states from all layers
-    hidden_states = outputs.hidden_states
-    
-    # If aggregation is specified, use all layers
-    if aggregation:
-        # Skip first hidden state (embedding layer) and process only transformer layers
-        transformer_hidden_states = hidden_states[1:]  # Skip the initial embedding layer
-        
-        if aggregation == "mean":
-            # Mean across all layers - shape: [batch_size, sequence_length, hidden_size]
-            aggregated_output = torch.stack(transformer_hidden_states).mean(dim=0)
-            last_token_embedding = aggregated_output[0, -1, :]
-        elif aggregation == "max":
-            # Max across all layers - shape: [batch_size, sequence_length, hidden_size]
-            aggregated_output = torch.stack(transformer_hidden_states).max(dim=0)[0]
-            last_token_embedding = aggregated_output[0, -1, :]
-        elif aggregation == "concat":
-            # Concatenate the last token embedding from all layers
-            last_token_embeddings = [state[0, -1, :] for state in transformer_hidden_states]
-            last_token_embedding = torch.cat(last_token_embeddings, dim=0)
-        else:
-            raise ValueError(f"Unsupported aggregation method: {aggregation}")
-    else:
-        # Use the specified layer index (original behavior)
-        layer_output = hidden_states[layer_idx]
-        last_token_embedding = layer_output[0, -1, :]
-    
-    return last_token_embedding.unsqueeze(0)  # Shape: [1, hidden_size] or [1, hidden_size*num_layers]
-
-def extract_batched_embeddings(model, tokenizer, prompts, layer_idx=-1, device='cuda' if torch.cuda.is_available() else 'cpu', aggregation=None):
-    """
-    Extract embeddings for a batch of prompts in a single forward pass from Vicuna model.
-    
-    Args:
-        model: The Vicuna model
-        tokenizer: The Vicuna tokenizer
-        prompts: List of prompt strings
-        layer_idx: The index of the layer to extract embeddings from (-1 for last layer)
-        device: Device to run inference on
-        aggregation: Method to aggregate across all layers (None, "mean", "max", "concat")
-    
-    Returns:
-        Batch of embeddings [batch_size, hidden_size] (or [batch_size, hidden_size*num_layers] for "concat")
-    """
-    # Format prompts for Vicuna
-    formatted_prompts = [format_vicuna_prompt(prompt) for prompt in prompts]
-    
-    inputs = tokenizer(formatted_prompts, return_tensors="pt", padding=True, truncation=True).to(device)
-    with torch.no_grad():
-        outputs = model(**inputs, output_hidden_states=True)
-    
-    # Get hidden states from all layers
-    hidden_states = outputs.hidden_states
-    
-    # If aggregation is specified, use all layers
-    if aggregation:
-        # Skip first hidden state (embedding layer) and process only transformer layers
-        transformer_hidden_states = hidden_states[1:]  # Skip the initial embedding layer
-        
-        if aggregation == "mean":
-            # Mean across all layers
-            aggregated_output = torch.stack(transformer_hidden_states).mean(dim=0)
-            mean_embeddings = aggregated_output.mean(dim=1)  # Mean over tokens
-        elif aggregation == "max":
-            # Max across all layers
-            aggregated_output = torch.stack(transformer_hidden_states).max(dim=0)[0]
-            mean_embeddings = aggregated_output.mean(dim=1)  # Mean over tokens
-        elif aggregation == "concat":
-            # Concatenate the mean token embedding from each layer
-            mean_layer_embeddings = [state.mean(dim=1) for state in transformer_hidden_states]
-            mean_embeddings = torch.cat(mean_layer_embeddings, dim=1)
-        else:
-            raise ValueError(f"Unsupported aggregation method: {aggregation}")
-    else:
-        # Use the specified layer index (original behavior)
-        layer_output = hidden_states[layer_idx]
-        mean_embeddings = layer_output.mean(dim=1)  # Mean over tokens
-    
-    return mean_embeddings
-
-def predict_remaining_tokens(model, vicuna_model, tokenizer, text, layer_idx=-1, aggregation=None):
-    """
-    Predict the number of remaining tokens in an LLM output sequence.
-    
-    Args:
-        model: The TokenLengthPredictor model
-        vicuna_model: The Vicuna model
-        tokenizer: The Vicuna tokenizer
-        text: The input text to process
-        layer_idx: The index of the layer to extract embeddings from
-        aggregation: Method to aggregate across all layers (None, "mean", "max", "concat")
-        
-    Returns:
-        Predicted number of remaining tokens
-    """
-    # Set models to evaluation mode
-    model.eval()
-    vicuna_model.eval()
-    
-    # Extract embeddings from Vicuna model
-    device = next(model.parameters()).device
-    embeddings = extract_vicuna_embeddings(vicuna_model, tokenizer, text, layer_idx, device, aggregation)
-    
-    # Make prediction with the model
-    with torch.no_grad():
-        prediction = model(embeddings)
-    
-    return prediction.item()
-
-def load_vicuna_model(model_name="lmsys/vicuna-13b-v1.3", use_auth_token=None, precision="float16", use_flash_attention=False):
-    """
-    Load a Vicuna model and tokenizer.
-    
-    Args:
-        model_name: The name of the model to load (default: lmsys/vicuna-13b-v1.3)
-        use_auth_token: HuggingFace token for accessing gated models
-        precision: Model precision - "float16", "bfloat16", or "float32"
-        use_flash_attention: Whether to use Flash Attention if available
-        
-    Returns:
-        model, tokenizer
-    """
-    logger.info(f"Loading Vicuna model: {model_name} with precision {precision}")
-    
-    # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=use_auth_token, legacy=False)
-    
-    # Determine torch dtype based on precision argument
-    if precision == "bfloat16" and torch.cuda.is_available() and torch.cuda.is_bf16_supported():
-        torch_dtype = torch.bfloat16
-        logger.info("Using BFloat16 precision")
-    elif precision == "float16":
-        torch_dtype = torch.float16
-        logger.info("Using Float16 precision")
-    else:
-        torch_dtype = torch.float32
-        logger.info("Using Float32 precision")
-    
-    # Set up Flash Attention configuration
-    attn_implementation = "flash_attention_2" if use_flash_attention else "eager"
-    if use_flash_attention:
-        try:
-            import transformers
-            if hasattr(transformers, "__version__"):
-                logger.info(f"Transformers version: {transformers.__version__}")
-                
-            # Check if Flash Attention is available
-            if hasattr(transformers, "utils") and hasattr(transformers.utils, "check_flash_attn_install"):
-                flash_available = transformers.utils.check_flash_attn_install()
-                if flash_available:
-                    logger.info("Flash Attention 2 is available and will be used")
-                else:
-                    logger.warning("Flash Attention not available. Will fall back to standard attention")
-                    attn_implementation = "eager"
-            else:
-                logger.warning("Could not verify Flash Attention availability. Will try to use it anyway")
-        except ImportError:
-            logger.warning("Could not verify Flash Attention availability. Will try to use it anyway")
-    
-    # Load model with ability to output hidden states
-    try:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            use_auth_token=use_auth_token,
-            output_hidden_states=True,
-            torch_dtype=torch_dtype,  # Use specified precision
-            device_map="auto",        # Automatically distribute across available GPUs
-            attn_implementation=attn_implementation,  # Use Flash Attention if requested and available
-        )
-        
-        if use_flash_attention and attn_implementation == "flash_attention_2":
-            logger.info("Model loaded with Flash Attention 2")
-        
-    except TypeError as e:
-        if "unexpected keyword argument 'attn_implementation'" in str(e):
-            # Fall back to loading without Flash Attention if the model doesn't support it
-            logger.warning(f"Model does not support Flash Attention: {e}. Loading with standard attention.")
-            model = AutoModelForCausalLM.from_pretrained(
-                model_name,
-                use_auth_token=use_auth_token,
-                output_hidden_states=True,
-                torch_dtype=torch_dtype,
-                device_map="auto",
-            )
-        else:
-            raise
-    
-    return model, tokenizer
+    return {"embeddings": embeddings, "labels": labels}
 
 def compute_metrics(preds, labels):
     """Compute regression metrics."""
@@ -317,22 +94,119 @@ def compute_metrics(preds, labels):
         "r2": r2
     }
 
-def extract_dataset_info(data_dir):
+def aggregate_embeddings(data, layers, method="mean"):
     """
-    Extract dataset information from the data directory path.
-    """
-    try:
-        # Extract the last part of the path
-        parts = data_dir.rstrip('/').split('/')
-        info = parts[-1]
+    Aggregate embeddings from multiple layers using the specified method.
+    
+    Args:
+        data: Dictionary containing embeddings for each layer
+        layers: List of layer names to aggregate
+        method: Aggregation method ('mean', 'sum', or 'concat')
         
-        # Remove any leading "lmsys_" prefix
-        if info.startswith('lmsys_'):
-            info = info[len('lmsys_'):]
+    Returns:
+        Aggregated embeddings tensor
+    """
+    if len(layers) == 1:
+        return data[layers[0]]
+    
+    if method == "concat":
+        # For concatenation, we stack embeddings along the feature dimension (dim=1)
+        return torch.cat([data[layer] for layer in layers], dim=1)
+    else:
+        # For mean and sum, we stack along a new dimension and then aggregate
+        stacked_embeddings = torch.stack([data[layer] for layer in layers])
+        
+        if method == "mean":
+            return torch.mean(stacked_embeddings, dim=0)
+        elif method == "sum":
+            return torch.sum(stacked_embeddings, dim=0)
+        else:
+            raise ValueError(f"Unknown aggregation method: {method}. Supported methods: 'mean', 'sum', 'concat'")
+
+def load_and_split_dataset(data_path, layers, agg_method="mean", train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, seed=42):
+    """
+    Load the dataset from a .pt file and split it into train, validation, and test sets.
+    Support for aggregating embeddings from multiple layers.
+    
+    Args:
+        data_path: Path to the .pt file containing the dataset
+        layers: List of layer names to use for embeddings
+        agg_method: Method for aggregating embeddings ('mean' or 'sum')
+        train_ratio: Ratio of data to use for training
+        val_ratio: Ratio of data to use for validation
+        test_ratio: Ratio of data to use for testing
+        seed: Random seed for reproducibility
+        
+    Returns:
+        train_dataset, val_dataset, test_dataset
+    """
+    logger.info(f"Loading dataset from {data_path}...")
+    
+    # Set seed for reproducibility
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    
+    # Load the dataset
+    try:
+        data = torch.load(data_path)
+        
+        # Check if the specified layers exist in the dataset
+        available_layers = [key for key in data.keys() if key != "labels"]
+        for layer in layers:
+            if layer not in data:
+                raise ValueError(f"Layer '{layer}' not found in the dataset. Available layers: {available_layers}")
+        
+        if len(layers) > 1:
+            logger.info(f"Aggregating embeddings from layers {layers} using {agg_method} method")
+            # Aggregate embeddings from specified layers
+            embeddings = aggregate_embeddings(data, layers, method=agg_method)
             
-        return info
-    except:
-        return "unknown_dataset"
+            # Log info about concatenation and embedding size
+            if agg_method == "concat":
+                orig_dim = data[layers[0]].shape[1]
+                logger.info(f"Concatenated {len(layers)} layers. Original dimension: {orig_dim}, " 
+                           f"New dimension: {embeddings.shape[1]}")
+        else:
+            logger.info(f"Using embeddings from layer {layers[0]}")
+            embeddings = data[layers[0]]
+            
+        labels = data["labels"].float()  # Convert labels to float
+        
+        logger.info(f"Dataset loaded with {len(labels)} examples")
+        logger.info(f"Embedding dimension: {embeddings.shape[1]}")
+        
+        # Create indices for splitting
+        indices = np.random.permutation(len(labels))
+        train_end = int(train_ratio * len(labels))
+        val_end = train_end + int(val_ratio * len(labels))
+        
+        train_indices = indices[:train_end]
+        val_indices = indices[train_end:val_end]
+        test_indices = indices[val_end:]
+        
+        # Create datasets
+        train_dataset = PreExtractedEmbeddingDataset(
+            embeddings[train_indices],
+            labels[train_indices]
+        )
+        
+        val_dataset = PreExtractedEmbeddingDataset(
+            embeddings[val_indices],
+            labels[val_indices]
+        )
+        
+        test_dataset = PreExtractedEmbeddingDataset(
+            embeddings[test_indices],
+            labels[test_indices]
+        )
+        
+        logger.info(f"Dataset split into {len(train_dataset)} training, {len(val_dataset)} validation, {len(test_dataset)} test examples")
+        
+        return train_dataset, val_dataset, test_dataset
+        
+    except Exception as e:
+        logger.error(f"Error loading dataset: {e}")
+        raise
 
 def train_model(args):
     """Training function."""
@@ -343,29 +217,39 @@ def train_model(args):
     # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
     
-    # Extract dataset info from data directory path
-    dataset_info = extract_dataset_info(args.data_dir)
-    
     # Initialize wandb logger with model name that includes dataset info
     config = vars(args)
-    # Add dataset info to config for better tracking
-    config['dataset_info'] = dataset_info
     config['loss_type'] = "L1Loss"  # We're using L1Loss
+    
+    # Create a descriptive model name based on layers used
+    if len(args.layers) > 1:
+        model_name = f"embedings_prediction-{args.aggregation}-{'-'.join(args.layers)}"
+    else:
+        model_name = f"embedings_prediction-layer{args.layers[0]}"
     
     wandb_logger = Logger(
         config=config,
-        model_name=f"embedings_prediction-vicuna",
+        model_name=model_name,
         project_name=args.wandb_project,
         enable_logging=args.use_wandb,
         log_model=args.log_model
     )
     
-    # Load dataset
-    logger.info(f"Loading train dataset from {args.data_dir}_train")
-    train_dataset = load_from_disk(f"{args.data_dir}_train")
+    # Load and split dataset with aggregation
+    train_dataset, val_dataset, test_dataset = load_and_split_dataset(
+        args.data_path, 
+        args.layers,
+        agg_method=args.aggregation,
+        train_ratio=0.7, 
+        val_ratio=0.15, 
+        test_ratio=0.15, 
+        seed=args.seed
+    )
     
-    logger.info(f"Loading validation dataset from {args.data_dir}_val")
-    val_dataset = load_from_disk(f"{args.data_dir}_val")
+    # Get embedding dimension from the dataset
+    sample_item = train_dataset[0]
+    input_dim = sample_item["embedding"].shape[0]
+    logger.info(f"Input embedding dimension: {input_dim}")
     
     # Create data loaders
     train_dataloader = DataLoader(
@@ -389,25 +273,8 @@ def train_model(args):
         collate_fn=custom_collate_fn
     )
     
-    # Load Vicuna model for embedding extraction
-    logger.info("Loading Vicuna model for training")
-    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision, False)
-    vicuna_model.eval()  # Set model to evaluation mode for embedding extraction
-    
-    # Get a sample batch to determine embedding size
-    sample_batch = next(iter(train_dataloader))
-    sample_prompts = sample_batch['prompt'][:1]  # Just use the first prompt
-    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
-    
-    # Extract sample embedding to determine input dimension
-    with torch.no_grad():
-        sample_embedding = extract_batched_embeddings(
-            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device, None
-        )
-        input_dim = sample_embedding.shape[1]
-        logger.info(f"Detected embedding dimension: {input_dim}")
     
     # Initialize model, loss function, and optimizer
     model = TokenLengthPredictor(input_dim=input_dim, hidden_dim=args.hidden_dim)
@@ -444,23 +311,14 @@ def train_model(args):
         train_labels = []
         
         for batch in train_pbar:
-            prompts = batch['prompt']
-            labels = batch['labels'].float().to(device)
+            embeddings = batch["embeddings"].to(device)
+            labels = batch["labels"].to(device)
             
             # Zero gradients
             optimizer.zero_grad()
             
-            # Extract embeddings from Vicuna model using raw prompts
+            # Forward pass with mixed precision
             with autocast(enabled=args.use_amp):
-                with torch.no_grad():
-                    embeddings = extract_batched_embeddings(
-                        vicuna_model, tokenizer, prompts, args.layer_idx, device, None
-                    )
-                
-                # Ensure embeddings are the same type as model parameters
-                if next(model.parameters()).dtype != embeddings.dtype:
-                    embeddings = embeddings.to(next(model.parameters()).dtype)
-                
                 outputs = model(embeddings)
                 loss = criterion(outputs, labels)
             
@@ -497,22 +355,17 @@ def train_model(args):
         
         with torch.no_grad():
             for batch in tqdm(val_dataloader, desc="Validation"):
-                prompts = batch['prompt']
-                labels = batch['labels'].float().to(device)
+                embeddings = batch["embeddings"].to(device)
+                labels = batch["labels"].to(device)
                 
-                # Extract embeddings from Vicuna model using raw prompts
+                # Forward pass with mixed precision
                 with autocast(enabled=args.use_amp):
-                    embeddings = extract_batched_embeddings(
-                        vicuna_model, tokenizer, prompts, args.layer_idx, device, None
-                    )
-                    
-                    # Ensure embeddings are the same type as model parameters
-                    if next(model.parameters()).dtype != embeddings.dtype:
-                        embeddings = embeddings.to(next(model.parameters()).dtype)
-                    
                     outputs = model(embeddings)
                 
                 # Calculate loss
+                # print 10 random values of outputs and labels
+                print(outputs[0:10])
+                print(labels[0:10])
                 loss = criterion(outputs, labels)
                 
                 val_loss += loss.item()
@@ -565,6 +418,8 @@ def train_model(args):
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'val_loss': avg_val_loss,
+                'input_dim': input_dim,
+                'hidden_dim': args.hidden_dim
             }
             torch.save(checkpoint, os.path.join(args.output_dir, "best_model.pt"))
             
@@ -592,6 +447,8 @@ def train_model(args):
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'val_loss': avg_val_loss,
+        'input_dim': input_dim,
+        'hidden_dim': args.hidden_dim
     }
     torch.save(checkpoint, os.path.join(args.output_dir, "final_model.pt"))
     
@@ -602,20 +459,47 @@ def train_model(args):
         wandb_logger.finish()
     
     # Final memory cleanup
-    del model, optimizer, vicuna_model, tokenizer, train_dataset, val_dataset, train_dataloader, val_dataloader
+    del model, optimizer, train_dataset, val_dataset, train_dataloader, val_dataloader
     
     return best_val_loss
 
 def evaluate(args):
-    """Evaluation function."""
+    """Evaluation function on the test set."""
     logger.info("Starting evaluation with clean memory state")
     
     set_seed(args.seed)
     
-    # Load test dataset
-    logger.info(f"Loading test dataset from {args.data_dir}_test")
-    test_dataset = load_from_disk(f"{args.data_dir}_test")
+    # Initialize wandb logger for evaluation
+    if args.use_wandb:
+        config = vars(args)
+        config['phase'] = 'evaluation'
+        
+        # Create a descriptive model name based on layers used
+        if len(args.layers) > 1:
+            model_name = f"eval-embed-predictor-{args.aggregation}-{'-'.join(args.layers)}"
+        else:
+            model_name = f"eval-embed-predictor-layer{args.layers[0]}"
+        
+        wandb_logger = Logger(
+            config=config,
+            model_name=model_name,
+            project_name=args.wandb_project,
+            enable_logging=args.use_wandb,
+            log_model=False
+        )
     
+    # Load and split dataset with aggregation
+    _, _, test_dataset = load_and_split_dataset(
+        args.data_path, 
+        args.layers,
+        agg_method=args.aggregation,
+        train_ratio=0.7, 
+        val_ratio=0.15, 
+        test_ratio=0.15, 
+        seed=args.seed
+    )
+    
+    # Create test data loader
     test_dataloader = DataLoader(
         test_dataset, 
         batch_size=args.batch_size,
@@ -626,48 +510,28 @@ def evaluate(args):
         collate_fn=custom_collate_fn
     )
     
-    # Extract dataset info for logging
-    dataset_info = extract_dataset_info(args.data_dir)
-    
-    # Initialize wandb logger for evaluation
-    if args.use_wandb:
-        config = vars(args)
-        config['dataset_info'] = dataset_info
-        config['phase'] = 'evaluation'
-        
-        wandb_logger = Logger(
-            config=config,
-            model_name=f"eval-embed-predictor-vicuna",
-            project_name=args.wandb_project,
-            enable_logging=args.use_wandb,
-            log_model=False
-        )
-    
-    # Load Vicuna model for embedding extraction
-    logger.info("Loading Vicuna model for evaluation")
-    vicuna_model, tokenizer = load_vicuna_model(args.vicuna_model_name, args.hf_token, args.precision, False)
-    vicuna_model.eval()
-    
-    # Load the best model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # Get a sample to determine embedding size
-    sample_batch = next(iter(test_dataloader))
-    sample_prompts = sample_batch['prompt'][:1]  # Just use the first prompt
-    
-    with torch.no_grad():
-        sample_embedding = extract_batched_embeddings(
-            vicuna_model, tokenizer, sample_prompts, args.layer_idx, device, None
-        )
-        input_dim = sample_embedding.shape[1]
-        logger.info(f"Detected embedding dimension: {input_dim}")
-    
-    model = TokenLengthPredictor(input_dim=input_dim, hidden_dim=args.hidden_dim)
-    
-    checkpoint = torch.load(os.path.join(args.output_dir, "best_model.pt"), map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model.to(device)
-    model.eval()
+    # Load the best model
+    try:
+        checkpoint = torch.load(os.path.join(args.output_dir, "best_model.pt"), map_location=device)
+        input_dim = checkpoint.get('input_dim')
+        hidden_dim = checkpoint.get('hidden_dim', args.hidden_dim)
+        
+        # If input_dim is not stored in the checkpoint, get it from the dataset
+        if input_dim is None:
+            sample_item = test_dataset[0]
+            input_dim = sample_item["embedding"].shape[0]
+            
+        model = TokenLengthPredictor(input_dim=input_dim, hidden_dim=hidden_dim)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.to(device)
+        model.eval()
+        
+        logger.info(f"Loaded model from {os.path.join(args.output_dir, 'best_model.pt')}")
+    except Exception as e:
+        logger.error(f"Error loading model: {e}")
+        raise
     
     # Evaluation
     all_preds = []
@@ -681,19 +545,11 @@ def evaluate(args):
     
     with torch.no_grad():
         for batch in tqdm(test_dataloader, desc="Testing"):
-            prompts = batch['prompt']
-            labels = batch['labels'].float().to(device)
+            embeddings = batch["embeddings"].to(device)
+            labels = batch["labels"].to(device)
             
-            # Extract embeddings from Vicuna model using raw prompts
+            # Forward pass with mixed precision
             with autocast(enabled=args.use_amp):
-                embeddings = extract_batched_embeddings(
-                    vicuna_model, tokenizer, prompts, args.layer_idx, device, None
-                )
-                
-                # Ensure embeddings are the same type as model parameters
-                if next(model.parameters()).dtype != embeddings.dtype:
-                    embeddings = embeddings.to(next(model.parameters()).dtype)
-                
                 outputs = model(embeddings)
             
             # Loss and predictions
@@ -741,42 +597,36 @@ def evaluate(args):
     
     # Clean up memory
     logger.info("Evaluation finished, cleaning up memory")
-    del model, vicuna_model, tokenizer, test_dataset, test_dataloader
+    del model, test_dataset, test_dataloader
     
     return metrics
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Train and evaluate a token length predictor with pre-extracted embeddings")
     
     # Data arguments
-    parser.add_argument("--data_dir", type=str, required=True, 
-                        help="Path to the processed dataset (without _train, _val, _test suffix)")
+    parser.add_argument("--data_path", type=str, required=True, 
+                        help="Path to the pre-extracted embeddings dataset (.pt file)")
+    parser.add_argument("--layers", type=str, nargs="+", default=None,
+                        help="List of layer names to use for embeddings (e.g., layer_8 layer_9)")
+    parser.add_argument("--aggregation", type=str, choices=["mean", "sum", "concat", "none"], default="none",
+                        help="Method to aggregate embeddings from multiple layers")
     
     # Model arguments
-    parser.add_argument("--input_dim", type=int, default=4096,
-                        help="Dimension of input embeddings (detected automatically)")
     parser.add_argument("--hidden_dim", type=int, default=512,
-                        help="Dimension of hidden layer")
-    parser.add_argument("--vicuna_model_name", type=str, default="lmsys/vicuna-13b-v1.3",
-                        help="Name of Vicuna model to use for embedding extraction")
-    parser.add_argument("--layer_idx", type=int, default=-1,
-                        help="Index of Vicuna layer to extract embeddings from (-1 for last layer)")
-    parser.add_argument("--hf_token", type=str, default=None,
-                        help="HuggingFace token for accessing gated models")
+                        help="Dimension of hidden layer in the predictor model")
     
     # Training arguments
     parser.add_argument("--output_dir", type=str, default="./results",
                         help="Directory to save model and results")
     parser.add_argument("--num_epochs", type=int, default=30,
                         help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=16,
+    parser.add_argument("--batch_size", type=int, default=32,
                         help="Batch size for training and evaluation")
-    parser.add_argument("--learning_rate", type=float, default=1e-5,
+    parser.add_argument("--learning_rate", type=float, default=1e-4,
                         help="Learning rate for optimizer")
     parser.add_argument("--weight_decay", type=float, default=0.01,
                         help="Weight decay for regularization")
-    parser.add_argument("--warmup_ratio", type=float, default=0.1,
-                        help="Ratio of warmup steps for learning rate scheduler")
     parser.add_argument("--max_grad_norm", type=float, default=1.0,
                         help="Maximum gradient norm for gradient clipping")
     parser.add_argument("--early_stopping_patience", type=int, default=5,
@@ -807,20 +657,22 @@ if __name__ == '__main__':
                         help="Whether to run evaluation on test set")
     
     # Precision arguments
-    parser.add_argument("--precision", type=str, default="float16", choices=["float16", "bfloat16", "float32"],
-                        help="Precision for Vicuna model")
     parser.add_argument("--use_amp", action="store_true",
                         help="Whether to use automatic mixed precision for training and inference")
     
     args = parser.parse_args()
     
+    # For backward compatibility
+    if args.layers is None:
+        args.layers = [args.layer_name]
+    
+    # Validate aggregation method and layers
+    if len(args.layers) > 1 and args.aggregation == "none":
+        logger.warning("Multiple layers specified but aggregation set to 'none'. Defaulting to 'mean' aggregation.")
+        args.aggregation = "mean"
+    
     # Clean CUDA memory at start
     free_gpu_memory()
-    
-    # Check if using BFloat16 on a supported device
-    if args.precision == "bfloat16" and (not torch.cuda.is_available() or not torch.cuda.is_bf16_supported()):
-        logger.warning("BFloat16 not supported on this device, falling back to Float16")
-        args.precision = "float16"
     
     if args.do_train:
         train_model(args)
