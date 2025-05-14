@@ -106,6 +106,94 @@ class EmbeddingExtractor:
         logger.debug(f"Extracted {len(labels)} tokens with embeddings")
         return layer_embeddings, labels, prompt_text, gen_len
 
+    def extract_hidden_state_sequences_all_layers_to_single_tensor(
+            self,
+            dataset_name,
+            split="train[:100]",
+            max_sequences=512,
+            output_file="/lustre/pd01/hpc-tomasznaskret-1742832160/hidden_state_sequences_all_layers_entropy.pt"
+    ):
+        logger.info(f"Loading dataset: {dataset_name}, split: {split}")
+        ds = load_dataset(dataset_name, split=split)
+
+        layer_count = self.layer_range[1] - self.layer_range[0]
+        all_layers_sequences = [[] for _ in range(layer_count)]
+        collected = 0
+
+        for example in tqdm(ds, desc="Collecting hidden states"):
+            if collected >= max_sequences:
+                break
+
+            prompt = example["text"]
+
+            try:
+                inputs = self.tokenizer(
+                    prompt,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=self.max_length,
+                    padding=True,
+                    return_attention_mask=True
+                ).to(self.device)
+
+                input_ids = inputs["input_ids"]
+                attention_mask = inputs["attention_mask"]
+                output_length = self.max_length - input_ids.shape[1]
+
+                if output_length <= 0:
+                    logger.warning(f"Prompt too long ({input_ids.shape[1]} tokens), skipping.")
+                    continue
+
+                with torch.no_grad():
+                    generated = self.model.generate(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        max_new_tokens=output_length,
+                        return_dict_in_generate=True,
+                        pad_token_id=self.tokenizer.pad_token_id
+                    )
+                    full_input = generated.sequences
+                    full_attention_mask = (full_input != self.tokenizer.pad_token_id).long()
+
+                    outputs = self.model(
+                        input_ids=full_input,
+                        attention_mask=full_attention_mask,
+                        output_hidden_states=True
+                    )
+
+                all_hidden_states = outputs.hidden_states  # tuple of (num_layers+1) tensors
+                prompt_len = input_ids.shape[1]
+                gen_len = full_input.shape[1] - prompt_len
+
+                if gen_len < 2:
+                    continue
+
+                for i, layer_idx in enumerate(range(*self.layer_range)):
+                    layer_states = all_hidden_states[layer_idx][0]  # [seq_len, hidden_size]
+                    generated_states = layer_states[prompt_len:]  # [gen_len, hidden_size]
+                    all_layers_sequences[i].append(generated_states.cpu())
+
+                collected += 1
+
+            except Exception as e:
+                logger.warning(f"Failed to process prompt: {e}")
+                continue
+
+        logger.info(f"Collected {collected} sequences for each layer")
+
+        # Determine max sequence length
+        max_len = max(seq.shape[0] for layer_seqs in all_layers_sequences for seq in layer_seqs)
+        hidden_size = all_layers_sequences[0][0].shape[1]
+
+        # Create one big tensor: [num_layers, num_sequences, max_len, hidden_size]
+        all_layers_tensor = torch.zeros((layer_count, collected, max_len, hidden_size))
+
+        for layer_i, layer_seqs in enumerate(all_layers_sequences):
+            for seq_i, seq in enumerate(layer_seqs):
+                all_layers_tensor[layer_i, seq_i, :seq.shape[0], :] = seq
+
+        torch.save(all_layers_tensor, output_file)
+        logger.info(f"✅ Saved all layers tensor of shape {all_layers_tensor.shape} to {output_file}")
 
     def process_dataset(self, dataset_name, split="train[:1000]", output_file="trail_dataset_all_layers.pt", batch_size=10):
         logger.info(f"Loading dataset: {dataset_name}, split: {split}")
@@ -204,12 +292,17 @@ def main():
         max_length=args.max_length
     )
 
-    extractor.process_dataset(
-        dataset_name=args.dataset,
-        split=args.split,
-        output_file=args.output
+    # extractor.process_dataset(
+    #     dataset_name=args.dataset,
+    #     split=args.split,
+    #     output_file=args.output
+    # )
+
+    extractor.extract_hidden_state_sequences_all_layers_to_single_tensor(
+        dataset_name="tatsu-lab/alpaca",
+        split="train[:100]",
     )
-    
+
     logger.info("Dataset generation completed successfully")
 
 
