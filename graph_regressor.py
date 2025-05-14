@@ -43,47 +43,32 @@ def set_seed(seed):
     random.seed(seed)
 
 
-class HiddenStatesGraphDataset(InMemoryDataset):
-    def __init__(self, embeddings, lengths, threshold=0.9, max_seq_len=None):
+class LayerwiseGraphDataset(InMemoryDataset):
+    def __init__(self, embeddings_by_layer, labels, edge_mode="sequential"):
         super().__init__()
-        self.data_list = self._build_graphs(embeddings, lengths, threshold, max_seq_len)
+        self.layer_names = list(embeddings_by_layer.keys())
+        self.data_list = self._build_graphs(embeddings_by_layer, labels, self.layer_names, edge_mode)
 
-    def _build_graphs(self, embeddings, lengths, threshold, max_seq_len):
+    def _build_graphs(self, embeddings_by_layer, labels, layer_order, edge_mode):
         graphs = []
-        i = 0
-        while i < len(lengths):
-            seq = []
-            original_length = 0
-            while i < len(lengths) and lengths[i] != 0:
-                seq.append(embeddings[i])
-                original_length += 1
-                i += 1
-            if i < len(lengths):
-                seq.append(embeddings[i])
-                original_length += 1
-                i += 1
+        num_tokens = len(labels)
 
-            if len(seq) < 2:
-                continue
+        for i in range(num_tokens):
+            node_features = [embeddings_by_layer[layer][i] for layer in layer_order]
+            x = torch.stack(node_features)  # [num_layers, hidden_dim]
+            y = torch.tensor([labels[i]], dtype=torch.float)
 
-            # Cut sequence to max_seq_len if set
-            if max_seq_len is not None:
-                seq = seq[:max_seq_len]
-
-            x = torch.stack(seq)
-            y = torch.tensor([original_length], dtype=torch.float)  # target is full sequence length
-
-            sim = cosine_similarity(x.numpy())
-            edge_index = []
-            for a in range(len(sim)):
-                for b in range(len(sim)):
-                    if a != b and sim[a, b] > threshold:
-                        edge_index.append([a, b])
-            if not edge_index:
-                edge_index = [[i, i + 1] for i in range(len(x) - 1)]
+            num_nodes = len(layer_order)
+            if edge_mode == "sequential":
+                edge_index = [[j, j + 1] for j in range(num_nodes - 1)]
+            elif edge_mode == "fully_connected":
+                edge_index = [[a, b] for a in range(num_nodes) for b in range(num_nodes) if a != b]
+            else:
+                raise ValueError(f"Unsupported edge_mode: {edge_mode}")
 
             edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
             graphs.append(Data(x=x, edge_index=edge_index, y=y))
+
         return graphs
 
     def __len__(self):
@@ -91,6 +76,7 @@ class HiddenStatesGraphDataset(InMemoryDataset):
 
     def __getitem__(self, idx):
         return self.data_list[idx]
+
 
 
 class GraphRegressor(nn.Module):
@@ -220,21 +206,20 @@ def split_dataset(dataset, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, see
     return train_dataset, val_dataset, test_dataset
 
 
-def load_dataset(path, layer, threshold=0.9, max_seq_len=None):
+def load_dataset(path, edge_mode="sequential"):
     logger.info(f"🔄 Loading data from {path}...")
     data = torch.load(path)
 
-    if layer not in data:
-        available_layers = [key for key in data.keys() if key != "labels"]
-        raise ValueError(f"Layer '{layer}' not found in the dataset. Available layers: {available_layers}")
-
-    embeddings = data[layer]
+    embeddings_by_layer = {k: v for k, v in data.items() if k.startswith("layer_")}
     labels = data["labels"]
 
-    logger.info(f"Creating graph dataset with threshold {threshold} and max_seq_len={max_seq_len}...")
-    dataset = HiddenStatesGraphDataset(embeddings, labels, threshold, max_seq_len)
-    logger.info(f"Created dataset with {len(dataset)} graphs")
+    logger.info(f"Using all {len(embeddings_by_layer)} layers: {list(embeddings_by_layer.keys())}")
+    dataset = LayerwiseGraphDataset(embeddings_by_layer, labels, edge_mode=edge_mode)
+    logger.info(f"✅ Created dataset with {len(dataset)} graphs (1 per token)")
+
     return dataset
+
+
 
 
 
@@ -251,7 +236,7 @@ def train_model(args):
     os.makedirs(args.output_dir, exist_ok=True)
     
     # Load dataset and create graph dataset
-    dataset = load_dataset(args.data_path, args.layer_name, args.threshold, args.max_seq_len)
+    dataset = load_dataset(args.data_path, args.edge_mode)
     
     # Split dataset
     train_dataset, val_dataset, test_dataset = split_dataset(
@@ -389,7 +374,7 @@ def evaluate_model(args):
     set_seed(args.seed)
     
     # Load dataset and create graph dataset
-    dataset = load_dataset(args.data_path, args.layer_name, args.threshold, args.max_seq_len)
+    dataset = load_dataset(args.data_path, args.edge_mode)
     
     # Split dataset
     _, _, test_dataset = split_dataset(
@@ -458,10 +443,6 @@ def main():
     # Data arguments
     parser.add_argument("--data_path", type=str, default="trail_dataset_all_layers.pt",
                         help="Path to the pre-extracted embeddings dataset (.pt file)")
-    parser.add_argument("--layer_name", type=str, default="layer_13",
-                        help="Name of the layer to use for embeddings (e.g., layer_13)")
-    parser.add_argument("--threshold", type=float, default=0.9,
-                        help="Cosine similarity threshold for creating graph edges")
     
     # Model arguments
     parser.add_argument("--hidden_dim", type=int, default=128,
@@ -501,9 +482,10 @@ def main():
     parser.add_argument("--use_amp", action="store_true",
                         help="Whether to use automatic mixed precision for training and inference")
     
-    parser.add_argument("--max_seq_len", type=int, default=5,
-                    help="Maximum number of tokens used per input sequence")
-    
+    parser.add_argument("--edge_mode", type=str, choices=["sequential", "fully_connected"], default="sequential",
+                        help="How to connect nodes (layers) in the token graph")
+
+
     args = parser.parse_args()
     
     if args.do_train:

@@ -86,20 +86,13 @@ stages:
 
   train_graph_regressors:
     foreach:
-      - {layer: 'layer_10', max_seq_len: 5, threshold: 0.9}
-      - {layer: 'layer_11', max_seq_len: 5, threshold: 0.9}
-      - {layer: 'layer_12', max_seq_len: 5, threshold: 0.9}
-      - {layer: 'layer_13', max_seq_len: 5, threshold: 0.9}
-      - {layer: 'layer_14', max_seq_len: 5, threshold: 0.9}
-      - {layer: 'layer_15', max_seq_len: 5, threshold: 0.9}
-      - {layer: 'layer_16', max_seq_len: 5, threshold: 0.9}
+      - { edge_mode: 'sequential'}
+      - { edge_mode: 'fully_connected'}
     do:
       cmd: >
         python graph_regressor.py
         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
-        --layer_name ${item.layer}
-        --threshold 0.9
-        --output_dir results/graph_regressor_${item.layer}
+        --output_dir results/graph_regressor_${item.edge_mode}
         --do_train
         --do_eval
         --batch_size 16
@@ -109,7 +102,7 @@ stages:
         --seed 42
         --use_amp
         --num_workers 4
-        --max_seq_len ${item.max_seq_len}
+        --edge_mode ${item.edge_mode}
       deps:
         - graph_regressor.py
 
