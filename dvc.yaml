@@ -251,7 +251,7 @@ stages:
         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
         --output_dir results/graph_binned_classifier_${item.edge_mode}
         --hidden_dim 128
-        --batch_size 16
+        --batch_size 32
         --learning_rate 1e-3
         --num_epochs 30
         --seed 42
