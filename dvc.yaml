@@ -96,7 +96,7 @@ stages:
         --do_train
         --do_eval
         --use_wandb
-        --wandb_project output-length-prediction
+        --wandb_project embeddings-length-predictor
         --batch_size 50
         --learning_rate 1e-5
         --num_epochs 30
