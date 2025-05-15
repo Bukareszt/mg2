@@ -60,11 +60,32 @@ stages:
       - {layers: 'layer_10 layer_11 layer_12', agg: 'sum'}
       - {layers: 'layer_11 layer_12 layer_13', agg: 'sum'}
       - {layers: 'layer_12 layer_13 layer_14', agg: 'sum'}
-      - {layers: 'layer_10 layer_11 layer_12', agg: 'concat'}
-      - {layers: 'layer_11 layer_12 layer_13', agg: 'concat'}
-      - {layers: 'layer_12 layer_13 layer_14', agg: 'concat'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'concat'}
-      - {layers: 'layer_8 layer_12 layer_15', agg: 'concat'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'mean'}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'mean'}
+      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
+      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'mean'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'mean'}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
+      - {layers: 'layer_8 layer_9 zlayer_10 layer_11 layer_12 layer_13', agg: 'mean'}
+      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'mean'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
+      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'mean'}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'mean'}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'mean'}
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'sum'}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'sum'}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'sum'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'mean'}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'mean'}
+      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
+      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'mean'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'mean'}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
+      - {layers: 'layer_8 layer_9 zlayer_10 layer_11 layer_12 layer_13', agg: 'mean'}
+      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'mean'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
+      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum'}
     do:
       cmd: >
         python embedings_prediction.py
@@ -76,7 +97,7 @@ stages:
         --do_eval
         --use_wandb
         --wandb_project output-length-prediction
-        --batch_size 15
+        --batch_size 50
         --learning_rate 1e-5
         --num_epochs 30
         --seed 42
