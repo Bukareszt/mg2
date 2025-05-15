@@ -154,7 +154,7 @@ stages:
         --layer_name ${item.layer}
         --output_dir results/binned_predictor_trail_${item.layer}_hidden${item.hidden_dim}
         --hidden_dim ${item.hidden_dim}
-        --learning_rate 1e-3
+        --learning_rate 1e-5
         --batch_size 16
         --num_epochs 30
         --seed 42
@@ -246,7 +246,7 @@ stages:
         --aggregation ${item.agg}
         --output_dir results/binned_predictor_${item.agg}_hidden${item.hidden_dim}
         --hidden_dim ${item.hidden_dim}
-        --learning_rate 1e-3
+        --learning_rate 1e-5
         --batch_size 16
         --num_epochs 30
         --seed 42
