@@ -119,7 +119,6 @@ stages:
 
   train_graph_regressors_thresholds:
     foreach:
-      - { edge_mode: 'sequential'}
       - { edge_mode: 'fully_connected'}
     do:
       cmd: >
