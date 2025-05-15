@@ -78,8 +78,8 @@ def compute_binned_metrics(logits, true_lengths, bin_edges):
     """
     Compute MAE, normalized MAE, and error correlation with prompt length.
     """
-    probs = torch.softmax(logits, dim=-1).cpu().numpy()
-    true_lengths = true_lengths.cpu().numpy()
+    probs = torch.softmax(logits, dim=-1).detach().cpu().numpy()
+    true_lengths = true_lengths.detach().cpu().numpy()
 
     midpoints = (bin_edges[:-1] + bin_edges[1:]) / 2
     expected = (probs * midpoints).sum(axis=1)
