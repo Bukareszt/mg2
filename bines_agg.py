@@ -123,11 +123,24 @@ def aggregate_layers(data, layer_names, aggregation='concat'):
         raise ValueError(f"Unsupported aggregation method: {aggregation}")
 
 # --- Data loader and split ---
-def load_and_split_dataset(data_path, layer_names, bin_edges, aggregation='concat', seed=42):
+def load_and_split_dataset(data_path, layer_names, bin_edges, aggregation='concat', length_threshold=0, seed=42):
     data = torch.load(data_path)
-    embeddings = aggregate_layers(data, layer_names, aggregation)
     labels = data["labels"].float()
-
+    
+    # Filter out tokens with labels less than threshold
+    if length_threshold > 0:
+        valid_indices = torch.where(labels >= length_threshold)[0]
+        logger.info(f"Filtering tokens with length < {length_threshold}: {len(labels)} → {len(valid_indices)} tokens")
+        
+        # Filter labels
+        labels = labels[valid_indices]
+        
+        # Create a filtered copy of data for aggregation
+        filtered_data = {k: v[valid_indices] if k.startswith("layer_") else v for k, v in data.items()}
+        embeddings = aggregate_layers(filtered_data, layer_names, aggregation)
+    else:
+        embeddings = aggregate_layers(data, layer_names, aggregation)
+    
     indices = np.random.RandomState(seed).permutation(len(labels))
     train_split = int(0.7 * len(labels))
     val_split = int(0.85 * len(labels))
@@ -161,6 +174,7 @@ def train_model(args):
         args.layer_names, 
         bin_edges, 
         aggregation=args.aggregation,
+        length_threshold=args.length_threshold,
         seed=args.seed
     )
     input_dim = train_set.embeddings.shape[1]
@@ -302,6 +316,8 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--min_loss_improvement', type=float, default=0.001)
     parser.add_argument('--use_amp', action='store_true')
+    parser.add_argument('--length_threshold', type=int, default=0,
+                        help='Minimum token length to include in training (tokens with fewer remaining tokens are filtered out)')
     parser.add_argument('--early_stopping_patience', type=int, default=5,
                         help='Number of epochs with no improvement after which training will be stopped')
     

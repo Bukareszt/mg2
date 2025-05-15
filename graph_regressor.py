@@ -225,12 +225,22 @@ def split_dataset(dataset, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, see
     return train_dataset, val_dataset, test_dataset
 
 
-def load_dataset(path, edge_mode="sequential"):
+def load_dataset(path, edge_mode="sequential", length_threshold=0):
     logger.info(f"🔄 Loading data from {path}...")
     data = torch.load(path)
 
     embeddings_by_layer = {k: v for k, v in data.items() if k.startswith("layer_")}
     labels = data["labels"]
+    
+    # Filter out tokens with labels less than threshold
+    if length_threshold > 0:
+        valid_indices = torch.where(labels >= length_threshold)[0]
+        logger.info(f"Filtering tokens with length < {length_threshold}: {len(labels)} → {len(valid_indices)} tokens")
+        
+        # Filter embeddings and labels
+        labels = labels[valid_indices]
+        for layer in embeddings_by_layer:
+            embeddings_by_layer[layer] = embeddings_by_layer[layer][valid_indices]
 
     logger.info(f"Using all {len(embeddings_by_layer)} layers: {list(embeddings_by_layer.keys())}")
     dataset = LayerwiseGraphDataset(embeddings_by_layer, labels, edge_mode=edge_mode)
@@ -269,7 +279,7 @@ def train_model(args):
     )
     
     # Load dataset and create graph dataset
-    dataset = load_dataset(args.data_path, args.edge_mode)
+    dataset = load_dataset(args.data_path, args.edge_mode, args.length_threshold)
     
     # Split dataset
     train_dataset, val_dataset, test_dataset = split_dataset(
@@ -457,7 +467,7 @@ def evaluate_model(args):
         )
     
     # Load dataset and create graph dataset
-    dataset = load_dataset(args.data_path, args.edge_mode)
+    dataset = load_dataset(args.data_path, args.edge_mode, args.length_threshold)
     
     # Split dataset
     _, _, test_dataset = split_dataset(
@@ -543,6 +553,8 @@ def main():
     # Data arguments
     parser.add_argument("--data_path", type=str, default="trail_dataset_all_layers.pt",
                         help="Path to the pre-extracted embeddings dataset (.pt file)")
+    parser.add_argument("--length_threshold", type=int, default=0,
+                        help="Minimum token length to include in training (tokens with fewer remaining tokens are filtered out)")
     
     # Model arguments
     parser.add_argument("--hidden_dim", type=int, default=128,

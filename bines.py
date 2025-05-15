@@ -102,10 +102,19 @@ def compute_binned_metrics(logits, true_lengths, bin_edges):
 
 
 # --- Data loader and split ---
-def load_and_split_dataset(data_path, layer_name, bin_edges, seed=42):
+def load_and_split_dataset(data_path, layer_name, bin_edges, length_threshold=0, seed=42):
     data = torch.load(data_path)
     embeddings = data[layer_name]
     labels = data["labels"].float()
+    
+    # Filter out tokens with labels less than threshold
+    if length_threshold > 0:
+        valid_indices = torch.where(labels >= length_threshold)[0]
+        logger.info(f"Filtering tokens with length < {length_threshold}: {len(labels)} → {len(valid_indices)} tokens")
+        
+        # Filter embeddings and labels
+        labels = labels[valid_indices]
+        embeddings = embeddings[valid_indices]
     
     indices = np.random.RandomState(seed).permutation(len(labels))
     train_split = int(0.7 * len(labels))
@@ -135,7 +144,13 @@ def train_model(args):
     )
 
     bin_edges = np.linspace(0, 512, 11)
-    train_set, val_set, _ = load_and_split_dataset(args.data_path, args.layer_name, bin_edges, seed=args.seed)
+    train_set, val_set, _ = load_and_split_dataset(
+        args.data_path, 
+        args.layer_name, 
+        bin_edges,
+        args.length_threshold,
+        seed=args.seed
+    )
     input_dim = train_set.embeddings.shape[1]
     logger.info(f"Input dimension: {input_dim}, using layer {args.layer_name}")
 
@@ -383,6 +398,8 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--min_loss_improvement', type=float, default=0.001)
     parser.add_argument('--use_amp', action='store_true')
+    parser.add_argument('--length_threshold', type=int, default=0,
+                        help='Minimum token length to include in training (tokens with fewer remaining tokens are filtered out)')
     parser.add_argument('--early_stopping_patience', type=int, default=5,
                         help='Number of epochs with no improvement after which training will be stopped')
     
