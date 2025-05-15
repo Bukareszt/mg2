@@ -4,6 +4,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from scipy.stats import pearsonr
 from torch.utils.data import Dataset, DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.cuda.amp import autocast, GradScaler
@@ -74,10 +75,29 @@ def custom_collate_fn(batch):
 
 # --- MAE from expected value ---
 def compute_binned_mae(logits, true_lengths, bin_edges):
+    """
+    Compute MAE, normalized MAE, and error correlation with prompt length.
+    """
     probs = torch.softmax(logits, dim=-1).cpu().numpy()
+    true_lengths = true_lengths.cpu().numpy()
+
     midpoints = (bin_edges[:-1] + bin_edges[1:]) / 2
     expected = (probs * midpoints).sum(axis=1)
-    return mean_absolute_error(true_lengths.cpu().numpy(), expected)
+
+    # MAE
+    mae = mean_absolute_error(true_lengths, expected)
+
+    # Normalized MAE
+    norm_mae = np.mean(np.abs(expected - true_lengths) / (true_lengths + 1e-8))
+
+    # Error-prompt length correlation
+    errors = np.abs(expected - true_lengths)
+    try:
+        corr, _ = pearsonr(errors, true_lengths)
+    except Exception:
+        corr = float('nan')
+
+    return mae, norm_mae, corr
 
 # --- Aggregate embeddings from multiple layers ---
 def aggregate_layers(data, layer_names, aggregation='concat'):
@@ -176,7 +196,8 @@ def train_model(args):
             total_loss += loss.item()
 
         train_loss = total_loss/len(train_loader)
-        
+        test_mae, test_norm_mae, test_corr = compute_binned_mae(all_logits, all_true, bin_edges)
+        logger.info(f"Test MAE: {test_mae:.4f}, Test Normalized MAE: {test_norm_mae:.4f}, Test Correlation: {test_corr:.4f}")
         # Validation
         model.eval()
         all_logits = []
@@ -198,11 +219,11 @@ def train_model(args):
                 
         all_logits = torch.cat(all_logits)
         all_true = torch.cat(all_true)
-        val_mae = compute_binned_mae(all_logits, all_true, bin_edges)
+        val_mae, val_norm_mae, val_corr = compute_binned_mae(all_logits, all_true, bin_edges)
         val_loss = val_loss / len(val_loader)
         
         # Log metrics
-        logger.info(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val MAE: {val_mae:.4f}")
+        logger.info(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val MAE: {val_mae:.4f} | Val Normalized MAE: {val_norm_mae:.4f} | Val Correlation: {val_corr:.4f}")
         
         # Log metrics to wandb
         if args.use_wandb:
@@ -210,7 +231,12 @@ def train_model(args):
                 "train/loss": train_loss,
                 "val/loss": val_loss,
                 "val/mae": val_mae,
-                "lr": optimizer.param_groups[0]['lr']
+                "val/normalized_mae": val_norm_mae,
+                "val/error_prompt_length_corr": val_corr,
+                "lr": optimizer.param_groups[0]['lr'],
+                "test/mae": test_mae,
+                "test/normalized_mae": test_norm_mae,
+                "test/error_prompt_length_corr": test_corr
             }
             wandb_logger.log_metrics(wandb_metrics, step=epoch)
 

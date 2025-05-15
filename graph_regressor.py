@@ -8,7 +8,6 @@ from torch.cuda.amp import autocast, GradScaler
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GCNConv, global_mean_pool
-from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import numpy as np
 import random
