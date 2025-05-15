@@ -127,7 +127,7 @@ stages:
         --output_dir results/graph_regressor_${item.edge_mode}
         --do_train
         --do_eval
-        --batch_size 16
+        --batch_size 32
         --learning_rate 1e-3
         --num_epochs 30
         --hidden_dim 128
