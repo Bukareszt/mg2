@@ -167,3 +167,34 @@ stages:
         --use_amp
       deps:
         - bines.py
+
+  train_binned_predictors_agg:
+    foreach:
+      - {layers: 'layer_10 layer_11 layer_12'}
+      - {layers: 'layer_11 layer_12 layer_13'}
+      - {layers: 'layer_12 layer_13 layer_14'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13'}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14'}
+      - {layers: 'layer_12 layer_13 layer_14 layer_15'}
+      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14'}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15'}
+      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13'}
+      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15'}
+      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15'}
+    do:
+      cmd: >
+        python bines_agg.py
+        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+        --layer_names ${item.layers}
+        --output_dir results/binned_predictor_concat_${item.layers// /_}
+        --hidden_dim 512
+        --learning_rate 1e-4
+        --batch_size 32
+        --num_epochs 30
+        --seed 42
+        --min_loss_improvement 0.001
+        --use_amp
+      deps:
+        - bines_agg.py
