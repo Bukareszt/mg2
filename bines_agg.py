@@ -211,7 +211,7 @@ def train_model(args):
             total_loss += loss.item()
 
         train_loss = total_loss/len(train_loader)
-        test_mae, test_norm_mae, test_corr = compute_binned_mae(all_logits, all_true, bin_edges)
+        test_mae, test_norm_mae, test_corr = compute_binned_mae(logits, y_bin, bin_edges)
         logger.info(f"Test MAE: {test_mae:.4f}, Test Normalized MAE: {test_norm_mae:.4f}, Test Correlation: {test_corr:.4f}")
         # Validation
         model.eval()
