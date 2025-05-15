@@ -241,7 +241,7 @@ stages:
       deps:
         - bines_agg.py
 
-  train_graph_binned_classifier:
+  train_binned_predictors_graph:
     foreach:
       - { edge_mode: 'sequential' }
       - { edge_mode: 'fully_connected' }
