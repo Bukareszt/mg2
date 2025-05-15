@@ -16,6 +16,7 @@ import logging
 import gc
 import argparse
 from tqdm import tqdm
+from logger import Logger  # Import the Logger class
 
 # Set up logging
 logging.basicConfig(
@@ -236,6 +237,20 @@ def train_model(args):
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
     
+    # Initialize wandb logger with model name that includes dataset info
+    config = vars(args)
+    config['loss_type'] = "MSELoss"  # We're using MSELoss
+    
+    model_name = f"graph-regressor-{args.edge_mode}"
+    
+    wandb_logger = Logger(
+        config=config,
+        model_name=model_name,
+        project_name=args.wandb_project,
+        enable_logging=args.use_wandb,
+        log_model=args.log_model
+    )
+    
     # Load dataset and create graph dataset
     dataset = load_dataset(args.data_path, args.edge_mode)
     
@@ -275,7 +290,7 @@ def train_model(args):
     
     # Initialize optimizer, loss function, and scheduler
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    loss_fn = nn.MSELoss()
+    loss_fn = nn.L1Loss()
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2, verbose=True)
     
     # Initialize gradient scaler for mixed precision training
@@ -321,6 +336,21 @@ def train_model(args):
         logger.info(f"  Val RMSE: {val_metrics['rmse']:.4f}")
         logger.info(f"  Val R²: {val_metrics['r2']:.4f}")
         
+        # Log metrics to wandb
+        if args.use_wandb:
+            wandb_metrics = {
+                "train/loss": train_metrics['loss'],
+                "train/mae": train_metrics['mae'],
+                "train/rmse": train_metrics['rmse'],
+                "train/r2": train_metrics['r2'],
+                "val/loss": val_metrics['loss'],
+                "val/mae": val_metrics['mae'],
+                "val/rmse": val_metrics['rmse'],
+                "val/r2": val_metrics['r2'],
+                "lr": optimizer.param_groups[0]['lr']
+            }
+            wandb_logger.log_metrics(wandb_metrics, step=epoch)
+        
         # Check for improvement and save model
         if val_metrics["loss"] + args.min_loss_improvement < best_val_loss:
             logger.info(f"Validation loss decreased from {best_val_loss:.4f} to {val_metrics['loss']:.4f}. Saving model...")
@@ -337,6 +367,14 @@ def train_model(args):
                 'hidden_dim': args.hidden_dim
             }
             torch.save(checkpoint, os.path.join(args.output_dir, "best_model.pt"))
+            
+            # Log model to wandb
+            if args.use_wandb and args.log_model:
+                wandb_logger.log_model_checkpoint(
+                    model, 
+                    os.path.join(args.output_dir, "best_model.pt"),
+                    f"best_model_epoch_{epoch}"
+                )
         else:
             early_stop_counter += 1
             logger.info(f"Validation loss did not decrease significantly. Early stopping counter: {early_stop_counter}/{args.early_stopping_patience}")
@@ -358,6 +396,10 @@ def train_model(args):
     
     logger.info(f"Training completed. Best validation loss: {best_val_loss:.4f}")
     
+    # Finish wandb logging
+    if args.use_wandb:
+        wandb_logger.finish()
+    
     # Clean up memory
     del model, optimizer, train_dataset, val_dataset, train_loader, val_loader
     free_gpu_memory()
@@ -373,6 +415,21 @@ def evaluate_model(args):
     free_gpu_memory()
     
     set_seed(args.seed)
+    
+    # Initialize wandb logger for evaluation
+    if args.use_wandb:
+        config = vars(args)
+        config['phase'] = 'evaluation'
+        
+        model_name = f"eval-graph-regressor-{args.edge_mode}"
+        
+        wandb_logger = Logger(
+            config=config,
+            model_name=model_name,
+            project_name=args.wandb_project,
+            enable_logging=args.use_wandb,
+            log_model=False
+        )
     
     # Load dataset and create graph dataset
     dataset = load_dataset(args.data_path, args.edge_mode)
@@ -427,6 +484,19 @@ def evaluate_model(args):
     logger.info(f"  MAE: {test_metrics['mae']:.4f}")
     logger.info(f"  RMSE: {test_metrics['rmse']:.4f}")
     logger.info(f"  R²: {test_metrics['r2']:.4f}")
+    
+    # Log test metrics to wandb
+    if args.use_wandb:
+        test_metrics_wandb = {
+            "test/loss": test_metrics['loss'],
+            "test/mae": test_metrics['mae'],
+            "test/mse": test_metrics['mse'],
+            "test/rmse": test_metrics['rmse'],
+            "test/r2": test_metrics['r2']
+        }
+        wandb_logger.log_metrics(test_metrics_wandb)
+        
+        wandb_logger.finish()
     
     # Clean up memory
     del model, test_dataset, test_loader
@@ -485,7 +555,14 @@ def main():
     
     parser.add_argument("--edge_mode", type=str, choices=["sequential", "fully_connected"], default="sequential",
                         help="How to connect nodes (layers) in the token graph")
-
+                        
+    # Wandb logging arguments
+    parser.add_argument("--use_wandb", action="store_true",
+                        help="Whether to use Weights & Biases for logging")
+    parser.add_argument("--wandb_project", type=str, default="graph-length-predictor",
+                        help="Weights & Biases project name")
+    parser.add_argument("--log_model", action="store_true",
+                        help="Whether to log model checkpoints to W&B")
 
     args = parser.parse_args()
     
