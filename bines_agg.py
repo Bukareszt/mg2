@@ -122,6 +122,17 @@ def load_and_split_dataset(data_path, layer_names, bin_edges, aggregation='conca
 def train_model(args):
     set_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Initialize wandb logger
+    config = vars(args)
+    model_name = f"binned-length-predictor-{args.aggregation}"
+    wandb_logger = Logger(
+        config=config,
+        model_name=model_name,
+        project_name=args.wandb_project,
+        enable_logging=args.use_wandb,
+        log_model=args.log_model
+    )
 
     bin_edges = np.linspace(0, 512, 11)
     train_set, val_set, _ = load_and_split_dataset(
@@ -132,8 +143,11 @@ def train_model(args):
         seed=args.seed
     )
     input_dim = train_set.embeddings.shape[1]
+    logger.info(f"Input dimension: {input_dim}, using {args.aggregation} aggregation")
 
     model = BinnedLengthPredictor(input_dim=input_dim, hidden_dim=args.hidden_dim, num_bins=len(bin_edges) - 1).to(device)
+    logger.info(f"Model has {sum(p.numel() for p in model.parameters()):,} parameters")
+    
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
     criterion = nn.CrossEntropyLoss()
@@ -143,6 +157,8 @@ def train_model(args):
     val_loader = DataLoader(val_set, batch_size=args.batch_size, collate_fn=custom_collate_fn)
 
     best_val_mae = float('inf')
+    early_stop_counter = 0
+    
     for epoch in range(args.num_epochs):
         model.train()
         total_loss = 0
@@ -159,28 +175,84 @@ def train_model(args):
             scaler.update()
             total_loss += loss.item()
 
+        train_loss = total_loss/len(train_loader)
+        
         # Validation
         model.eval()
         all_logits = []
         all_true = []
+        val_loss = 0
         with torch.no_grad():
             for batch in val_loader:
                 x = batch['embeddings'].to(device)
                 y_real = batch['labels'].to(device)
-                logits = model(x)
+                y_bin = batch['bin_labels'].to(device)
+                
+                with autocast(enabled=args.use_amp):
+                    logits = model(x)
+                    loss = criterion(logits, y_bin)
+                
+                val_loss += loss.item()
                 all_logits.append(logits)
                 all_true.append(y_real)
+                
         all_logits = torch.cat(all_logits)
         all_true = torch.cat(all_true)
         val_mae = compute_binned_mae(all_logits, all_true, bin_edges)
-        logger.info(f"Epoch {epoch+1} | Train Loss: {total_loss/len(train_loader):.4f} | Val MAE: {val_mae:.4f}")
+        val_loss = val_loss / len(val_loader)
+        
+        # Log metrics
+        logger.info(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val MAE: {val_mae:.4f}")
+        
+        # Log metrics to wandb
+        if args.use_wandb:
+            wandb_metrics = {
+                "train/loss": train_loss,
+                "val/loss": val_loss,
+                "val/mae": val_mae,
+                "lr": optimizer.param_groups[0]['lr']
+            }
+            wandb_logger.log_metrics(wandb_metrics, step=epoch)
 
         scheduler.step(val_mae)
+        
         if val_mae < best_val_mae - args.min_loss_improvement:
             best_val_mae = val_mae
+            early_stop_counter = 0
             output_dir = os.path.join(args.output_dir, f"{args.aggregation}")
             os.makedirs(output_dir, exist_ok=True)
-            torch.save(model.state_dict(), os.path.join(output_dir, "best_model.pt"))
+            
+            # Save the model checkpoint
+            checkpoint = {
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'val_mae': val_mae,
+                'input_dim': input_dim,
+                'hidden_dim': args.hidden_dim
+            }
+            checkpoint_path = os.path.join(output_dir, "best_model.pt")
+            torch.save(checkpoint, checkpoint_path)
+            logger.info(f"Saved model checkpoint to {checkpoint_path}")
+            
+            # Log model to wandb
+            if args.use_wandb and args.log_model:
+                wandb_logger.log_model_checkpoint(
+                    model,
+                    checkpoint_path,
+                    f"best_model_epoch_{epoch}"
+                )
+        else:
+            early_stop_counter += 1
+            logger.info(f"Validation MAE did not improve. Early stopping counter: {early_stop_counter}/{args.early_stopping_patience}")
+            
+            if early_stop_counter >= args.early_stopping_patience:
+                logger.info(f"Early stopping triggered after {epoch+1} epochs")
+                break
+    
+    # Finish wandb logging
+    if args.use_wandb:
+        wandb_logger.finish()
 
 # --- Seed ---
 def set_seed(seed):
@@ -203,8 +275,22 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--min_loss_improvement', type=float, default=0.001)
     parser.add_argument('--use_amp', action='store_true')
+    parser.add_argument('--early_stopping_patience', type=int, default=5,
+                        help='Number of epochs with no improvement after which training will be stopped')
+    
+    # Wandb logging arguments
+    parser.add_argument('--use_wandb', action='store_true', help='Whether to use Weights & Biases for logging')
+    parser.add_argument('--wandb_project', type=str, default='binned-length-predictor', help='Weights & Biases project name')
+    parser.add_argument('--log_model', action='store_true', help='Whether to log model checkpoints to W&B')
+    
+    # Mode arguments
+    parser.add_argument('--do_train', action='store_true', help='Whether to run training')
+    parser.add_argument('--do_eval', action='store_true', help='Whether to run evaluation on test set')
+    
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
     free_gpu_memory()
-    train_model(args)
+    
+    if args.do_train:
+        train_model(args)
