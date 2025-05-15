@@ -1,4 +1,5 @@
 import torch
+from scipy.stats import pearsonr
 from torch import nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -169,16 +170,30 @@ def evaluate(model, loader, loss_fn, device, use_amp=False):
 
 
 def compute_metrics(preds, labels):
-    """Compute regression metrics."""
+    """Compute regression metrics and length-aware metrics."""
     mae = mean_absolute_error(labels, preds)
     mse = mean_squared_error(labels, preds)
     rmse = np.sqrt(mse)
     r2 = r2_score(labels, preds)
+
+    # Avoid division by zero
+    normalized_abs_error = np.abs(np.array(preds) - np.array(labels)) / (np.array(labels) + 1e-8)
+    mean_normalized_abs_error = np.mean(normalized_abs_error)
+
+    # Error vs prompt length correlation
+    abs_errors = np.abs(np.array(preds) - np.array(labels))
+    try:
+        correlation_with_length, _ = pearsonr(abs_errors, labels)
+    except Exception as e:
+        correlation_with_length = float('nan')  # In case of constant inputs
+
     return {
         "mae": mae,
         "mse": mse,
         "rmse": rmse,
-        "r2": r2
+        "r2": r2,
+        "normalized_mae": mean_normalized_abs_error,
+        "error_prompt_length_corr": correlation_with_length
     }
 
 
@@ -331,11 +346,15 @@ def train_model(args):
         logger.info(f"  Train MAE: {train_metrics['mae']:.4f}")
         logger.info(f"  Train RMSE: {train_metrics['rmse']:.4f}")
         logger.info(f"  Train R²: {train_metrics['r2']:.4f}")
+        logger.info(f"  Train Norm. MAE: {train_metrics['normalized_mae']:.4f}")
+        logger.info(f"  Train Error-Length Corr: {train_metrics['error_prompt_length_corr']:.4f}")
         logger.info(f"  Val Loss: {val_metrics['loss']:.4f}")
         logger.info(f"  Val MAE: {val_metrics['mae']:.4f}")
         logger.info(f"  Val RMSE: {val_metrics['rmse']:.4f}")
         logger.info(f"  Val R²: {val_metrics['r2']:.4f}")
-        
+        logger.info(f"  Val Norm. MAE: {val_metrics['normalized_mae']:.4f}")
+        logger.info(f"  Val Error-Length Corr: {val_metrics['error_prompt_length_corr']:.4f}")
+
         # Log metrics to wandb
         if args.use_wandb:
             wandb_metrics = {
@@ -343,11 +362,15 @@ def train_model(args):
                 "train/mae": train_metrics['mae'],
                 "train/rmse": train_metrics['rmse'],
                 "train/r2": train_metrics['r2'],
+                "train/normalized_mae": train_metrics['normalized_mae'],
+                "train/error_prompt_length_corr": train_metrics['error_prompt_length_corr'],
                 "val/loss": val_metrics['loss'],
                 "val/mae": val_metrics['mae'],
                 "val/rmse": val_metrics['rmse'],
                 "val/r2": val_metrics['r2'],
-                "lr": optimizer.param_groups[0]['lr']
+                "lr": optimizer.param_groups[0]['lr'],
+                "val/normalized_mae": val_metrics['normalized_mae'],
+                "val/error_prompt_length_corr": val_metrics['error_prompt_length_corr'],
             }
             wandb_logger.log_metrics(wandb_metrics, step=epoch)
         
@@ -484,7 +507,9 @@ def evaluate_model(args):
     logger.info(f"  MAE: {test_metrics['mae']:.4f}")
     logger.info(f"  RMSE: {test_metrics['rmse']:.4f}")
     logger.info(f"  R²: {test_metrics['r2']:.4f}")
-    
+    logger.info(f"  Norm. MAE: {test_metrics['normalized_mae']:.4f}")
+    logger.info(f"  Error-Length Corr: {test_metrics['error_prompt_length_corr']:.4f}")
+
     # Log test metrics to wandb
     if args.use_wandb:
         test_metrics_wandb = {
@@ -492,7 +517,9 @@ def evaluate_model(args):
             "test/mae": test_metrics['mae'],
             "test/mse": test_metrics['mse'],
             "test/rmse": test_metrics['rmse'],
-            "test/r2": test_metrics['r2']
+            "test/r2": test_metrics['r2'],
+            "val/normalized_mae": test_metrics['normalized_mae'],
+            "val/error_prompt_length_corr": test_metrics['error_prompt_length_corr'],
         }
         wandb_logger.log_metrics(test_metrics_wandb)
         
@@ -524,9 +551,9 @@ def main():
                         help="Directory to save model and results")
     parser.add_argument("--num_epochs", type=int, default=30,
                         help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=16,
+    parser.add_argument("--batch_size", type=int, default=50,
                         help="Batch size for training and evaluation")
-    parser.add_argument("--learning_rate", type=float, default=1e-3,
+    parser.add_argument("--learning_rate", type=float, default=1e-5,
                         help="Learning rate for optimizer")
     parser.add_argument("--weight_decay", type=float, default=0.01,
                         help="Weight decay for regularization")

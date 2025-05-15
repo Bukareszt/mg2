@@ -1,20 +1,20 @@
 stages:
-  train_bert_length_predictors:
-    foreach:
-      - 10
-      - 50
-    do:
-      cmd: >
-        python lenght_prediction.py
-        --data_dir data/lmsys_vicuna-13b_preview0_${item}K
-        --model_name google-bert/bert-base-uncased
-        --output_dir results/bert_length_predictor_${item}
-        --batch_size 5
-        --seed 42
-        --use_wandb
-        --wandb_project output-length-prediction
-        --do_eval
-        --do_train
+#  train_bert_length_predictors:
+#    foreach:
+#      - 10
+#      - 50
+#    do:
+#      cmd: >
+#        python lenght_prediction.py
+#        --data_dir data/lmsys_vicuna-13b_preview0_${item}K
+#        --model_name google-bert/bert-base-uncased
+#        --output_dir results/bert_length_predictor_${item}
+#        --batch_size 5
+#        --seed 42
+#        --use_wandb
+#        --wandb_project output-length-prediction
+#        --do_eval
+#        --do_train
 
   generate_trail_dataset:
     cmd: >
@@ -26,31 +26,6 @@ stages:
       --output /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
     deps:
       - generate_dataset.py
-        
-  train_embeddings_predictors_trail:
-    foreach:
-      - 'layer_8'
-      - 'layer_9'
-      - 'layer_10'
-      - 'layer_11'
-      - 'layer_12'
-      - 'layer_13'
-      - 'layer_14'
-      - 'layer_15'
-    do:
-      cmd: >
-        python embedings_prediction2.py
-        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
-        --layer_name ${item}
-        --output_dir results/embeddings_predictor_trail_${item}
-        --use_wandb
-        --do_train
-        --do_eval
-        --batch_size 50
-        --learning_rate 1e-5
-        --num_epochs 30
-        --seed 42
-        --use_amp
 
   train_embeddings_predictors_agg:
     foreach:
@@ -119,7 +94,12 @@ stages:
 
   train_graph_regressors_thresholds:
     foreach:
-      - { edge_mode: 'fully_connected'}
+      - { edge_mode: 'fully_connected', hidden_dim: 128 }
+      - { edge_mode: 'sequential', hidden_dim: 128 }
+      - { edge_mode: 'fully_connected', hidden_dim: 256 }
+      - { edge_mode: 'sequential', hidden_dim: 256 }
+      - { edge_mode: 'fully_connected', hidden_dim: 512 }
+      - { edge_mode: 'sequential', hidden_dim: 512 }
     do:
       cmd: >
         python graph_regressor.py
@@ -127,8 +107,8 @@ stages:
         --output_dir results/graph_regressor_${item.edge_mode}
         --do_train
         --do_eval
-        --batch_size 32
-        --learning_rate 1e-3
+        --batch_size 50
+        --learning_rate 1e-5
         --num_epochs 30
         --hidden_dim 128
         --seed 42
@@ -159,8 +139,8 @@ stages:
         --layer_name ${item}
         --output_dir results/binned_predictor_trail_${item}
         --hidden_dim 512
-        --learning_rate 1e-4
-        --batch_size 32
+        --learning_rate 1e-5
+        --batch_size 50
         --num_epochs 30
         --seed 42
         --min_loss_improvement 0.001
@@ -240,22 +220,3 @@ stages:
         --early_stopping_patience 5
       deps:
         - bines_agg.py
-
-  train_binned_predictors_graph:
-    foreach:
-      - { edge_mode: 'sequential' }
-      - { edge_mode: 'fully_connected' }
-    do:
-      cmd: >
-        python bin_graph.py
-        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
-        --output_dir results/graph_binned_classifier_${item.edge_mode}
-        --hidden_dim 128
-        --batch_size 32
-        --learning_rate 1e-3
-        --num_epochs 30
-        --seed 42
-        --edge_mode ${item.edge_mode}
-        --use_amp
-      deps:
-        - bin_graph.py
