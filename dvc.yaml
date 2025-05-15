@@ -92,52 +92,68 @@ stages:
 #      deps:
 #        - embedings_prediction.py
 
-  train_graph_regressors_thresholds:
-    foreach:
-#      - { edge_mode: 'sequential', hidden_dim: 128 }
-      - { edge_mode: 'fully_connected', hidden_dim: 256 }
-#      - { edge_mode: 'sequential', hidden_dim: 256 }
-      - { edge_mode: 'fully_connected', hidden_dim: 512 }
-#      - { edge_mode: 'sequential', hidden_dim: 512 }
-    do:
-      cmd: >
-        python graph_regressor.py
-        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
-        --output_dir results/graph_regressor_${item.edge_mode}
-        --do_train
-        --do_eval
-        --batch_size 16
-        --learning_rate 1e-3
-        --num_epochs 30
-        --hidden_dim ${item.hidden_dim}
-        --seed 42
-        --use_amp
-        --num_workers 4
-        --edge_mode ${item.edge_mode}
-        --use_wandb
-        --wandb_project embeddings-length-predictor
-        --do_train
-        --do_eval
-      deps:
-        - graph_regressor.py
+#   train_graph_regressors_thresholds:
+#     foreach:
+# #      - { edge_mode: 'sequential', hidden_dim: 128 }
+#       - { edge_mode: 'fully_connected', hidden_dim: 256 }
+# #      - { edge_mode: 'sequential', hidden_dim: 256 }
+#       - { edge_mode: 'fully_connected', hidden_dim: 512 }
+# #      - { edge_mode: 'sequential', hidden_dim: 512 }
+#     do:
+#       cmd: >
+#         python graph_regressor.py
+#         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+#         --output_dir results/graph_regressor_${item.edge_mode}
+#         --do_train
+#         --do_eval
+#         --batch_size 16
+#         --learning_rate 1e-3
+#         --num_epochs 30
+#         --hidden_dim ${item.hidden_dim}
+#         --seed 42
+#         --use_amp
+#         --num_workers 4
+#         --edge_mode ${item.edge_mode}
+#         --use_wandb
+#         --wandb_project embeddings-length-predictor
+#         --do_train
+#         --do_eval
+#       deps:
+#         - graph_regressor.py
 
   train_binned_predictors_trail:
     foreach:
-      - 'layer_8'
-      - 'layer_9'
-      - 'layer_10'
-      - 'layer_11'
-      - 'layer_12'
-      - 'layer_13'
-      - 'layer_14'
-      - 'layer_15'
+      - {layer: 'layer_8', hidden_dim: 128}
+      - {layer: 'layer_9', hidden_dim: 128}
+      - {layer: 'layer_10', hidden_dim: 128}
+      - {layer: 'layer_11', hidden_dim: 128}
+      - {layer: 'layer_12', hidden_dim: 128}
+      - {layer: 'layer_13', hidden_dim: 128}
+      - {layer: 'layer_14', hidden_dim: 128}
+      - {layer: 'layer_15', hidden_dim: 128}
+      - {layer: 'layer_8', hidden_dim: 256}
+      - {layer: 'layer_9', hidden_dim: 256}
+      - {layer: 'layer_10', hidden_dim: 256}
+      - {layer: 'layer_11', hidden_dim: 256}
+      - {layer: 'layer_12', hidden_dim: 256}
+      - {layer: 'layer_13', hidden_dim: 256}
+      - {layer: 'layer_14', hidden_dim: 256}
+      - {layer: 'layer_15', hidden_dim: 256}
+      - {layer: 'layer_8', hidden_dim: 512}
+      - {layer: 'layer_9', hidden_dim: 512}
+      - {layer: 'layer_10', hidden_dim: 512}
+      - {layer: 'layer_11', hidden_dim: 512}
+      - {layer: 'layer_12', hidden_dim: 512}
+      - {layer: 'layer_13', hidden_dim: 512}
+      - {layer: 'layer_14', hidden_dim: 512}
+      - {layer: 'layer_15', hidden_dim: 512}
     do:
       cmd: >
         python bines.py
         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
-        --layer_name ${item}
-        --output_dir results/binned_predictor_trail_${item}
-        --hidden_dim 512
+        --layer_name ${item.layer}
+        --output_dir results/binned_predictor_trail_${item.layer}_hidden${item.hidden_dim}
+        --hidden_dim ${item.hidden_dim}
         --learning_rate 1e-3
         --batch_size 16
         --num_epochs 30
@@ -154,58 +170,82 @@ stages:
 
   train_binned_predictors_agg:
     foreach:
-      # Mean aggregation
-      - {layers: 'layer_10 layer_11 layer_12', agg: 'mean'}
-      - {layers: 'layer_11 layer_12 layer_13', agg: 'mean'}
-      - {layers: 'layer_12 layer_13 layer_14', agg: 'mean'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'mean'}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'mean'}
-      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
-      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'mean'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'mean'}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
-      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'mean'}
-      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'mean'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
-      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
+      # Mean aggregation with hidden_dim variants
+      # 3 layers
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'mean', hidden_dim: 128}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'mean', hidden_dim: 128}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 128}
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'mean', hidden_dim: 256}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'mean', hidden_dim: 256}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 256}
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'mean', hidden_dim: 512}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'mean', hidden_dim: 512}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 512}
       
-      # Sum aggregation
-      - {layers: 'layer_10 layer_11 layer_12', agg: 'sum'}
-      - {layers: 'layer_11 layer_12 layer_13', agg: 'sum'}
-      - {layers: 'layer_12 layer_13 layer_14', agg: 'sum'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'sum'}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'sum'}
-      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'sum'}
-      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'sum'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'sum'}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum'}
-      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'sum'}
-      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'sum'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum'}
-      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum'}
+      # 4 layers
+      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'mean', hidden_dim: 128}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 128}
+      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 128}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'mean', hidden_dim: 256}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 256}
+      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 256}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'mean', hidden_dim: 512}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 512}
+      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 512}
       
-      # Concat aggregation
-      - {layers: 'layer_10 layer_11 layer_12', agg: 'concat'}
-      - {layers: 'layer_11 layer_12 layer_13', agg: 'concat'}
-      - {layers: 'layer_12 layer_13 layer_14', agg: 'concat'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'concat'}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'concat'}
-      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'concat'}
-      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'concat'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'concat'}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'concat'}
-      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'concat'}
-      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'concat'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'concat'}
-      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'concat'}
+      # 5 layers
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 128}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 128}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 256}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 256}
+      
+      # 6 layers
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 128}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 256}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 512}
+
+      # 3 layers
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'sum', hidden_dim: 128}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'sum', hidden_dim: 128}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 128}
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'sum', hidden_dim: 256}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'sum', hidden_dim: 256}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 256}
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'sum', hidden_dim: 512}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'sum', hidden_dim: 512}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 512}
+      
+      # 4 layers
+      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'sum', hidden_dim: 128}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 128}
+      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 128}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'sum', hidden_dim: 256}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 256}
+      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 256}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'sum', hidden_dim: 512}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 512}
+      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 512}
+      
+      # 5 layers
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 128}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 128}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 256}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 256}
+      
+      # 6 layers
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 128}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 256}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 512}
+      # Additional configurations for other layer combinations and aggregation methods can be added similarly
+      # ... (repeat pattern for other configurations)
     do:
       cmd: >
         python bines_agg.py
         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
         --layer_names ${item.layers}
         --aggregation ${item.agg}
-        --output_dir results/binned_predictor_${item.agg}
-        --hidden_dim 512
+        --output_dir results/binned_predictor_${item.agg}_hidden${item.hidden_dim}
+        --hidden_dim ${item.hidden_dim}
         --learning_rate 1e-3
         --batch_size 16
         --num_epochs 30
