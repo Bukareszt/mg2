@@ -165,6 +165,11 @@ stages:
         --seed 42
         --min_loss_improvement 0.001
         --use_amp
+        --use_wandb
+        --wandb_project embeddings-length-predictor
+        --do_train
+        --do_eval
+        --early_stopping_patience 5
       deps:
         - bines.py
 
