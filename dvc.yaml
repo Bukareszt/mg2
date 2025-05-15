@@ -219,3 +219,19 @@ stages:
         --early_stopping_patience 5
       deps:
         - bines_agg.py
+
+  evaluate_pia_models:
+    foreach:
+      - { model: "meta-llama/Meta-Llama-3-8B-Instruct", max_new_tokens: 512 }
+    do:
+      cmd: >
+        python pia.py
+        --model_id ${item.model}
+        --metadata_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_metadata.pt
+        --max_samples 1000
+        --max_new_tokens ${item.max_new_tokens}
+        --use_wandb
+        --wandb_project pia-evaluator
+        --wandb_name pia-${item.model}
+      deps:
+        - pia.py
