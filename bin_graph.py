@@ -179,7 +179,8 @@ def train_and_evaluate(args):
 
         logits = torch.cat(all_logits)
         true_bins = torch.cat(all_true)
-        val_mae = compute_binned_mae(logits, true_lengths[true_bins], bin_edges)
+        val_mae = compute_binned_mae(logits, true_lengths[true_bins.cpu()], bin_edges)
+
 
         logger.info(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val MAE: {val_mae:.4f}")
         scheduler.step(val_mae)
