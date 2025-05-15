@@ -176,8 +176,11 @@ def compute_metrics(preds, labels):
     r2 = r2_score(labels, preds)
 
     # Avoid division by zero
-    normalized_abs_error = np.abs(np.array(preds) - np.array(labels)) / (np.array(labels) + 1e-8)
-    mean_normalized_abs_error = np.mean(normalized_abs_error)
+    nonzero_mask = labels != 0
+    if np.any(nonzero_mask):
+        norm_mae = np.mean(np.abs(preds[nonzero_mask] - labels[nonzero_mask]) / labels[nonzero_mask])
+    else:
+        norm_mae = float('nan')
 
     # Error vs prompt length correlation
     abs_errors = np.abs(np.array(preds) - np.array(labels))
@@ -191,7 +194,7 @@ def compute_metrics(preds, labels):
         "mse": mse,
         "rmse": rmse,
         "r2": r2,
-        "normalized_mae": mean_normalized_abs_error,
+        "normalized_mae": norm_mae,
         "error_prompt_length_corr": correlation_with_length
     }
 

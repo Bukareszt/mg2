@@ -88,7 +88,8 @@ def compute_binned_mae(logits, true_lengths, bin_edges):
     mae = mean_absolute_error(true_lengths, expected)
 
     # Normalized MAE
-    norm_mae = np.mean(np.abs(expected - true_lengths) / (true_lengths + 1e-8))
+    nonzero_mask = true_lengths != 0
+    norm_mae = np.mean(np.abs(expected[nonzero_mask] - true_lengths[nonzero_mask]) / true_lengths[nonzero_mask])
 
     # Error-prompt length correlation
     errors = np.abs(expected - true_lengths)
