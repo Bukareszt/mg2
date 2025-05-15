@@ -170,25 +170,57 @@ stages:
 
   train_binned_predictors_agg:
     foreach:
-      - {layers: 'layer_10 layer_11 layer_12'}
-      - {layers: 'layer_11 layer_12 layer_13'}
-      - {layers: 'layer_12 layer_13 layer_14'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13'}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14'}
-      - {layers: 'layer_12 layer_13 layer_14 layer_15'}
-      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14'}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15'}
-      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13'}
-      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14'}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15'}
-      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15'}
+      # Mean aggregation
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'mean'}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'mean'}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'mean'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'mean'}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'mean'}
+      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
+      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'mean'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'mean'}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
+      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'mean'}
+      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'mean'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
+      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean'}
+      
+      # Sum aggregation
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'sum'}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'sum'}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'sum'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'sum'}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'sum'}
+      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'sum'}
+      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'sum'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'sum'}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum'}
+      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'sum'}
+      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'sum'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum'}
+      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum'}
+      
+      # Concat aggregation
+      - {layers: 'layer_10 layer_11 layer_12', agg: 'concat'}
+      - {layers: 'layer_11 layer_12 layer_13', agg: 'concat'}
+      - {layers: 'layer_12 layer_13 layer_14', agg: 'concat'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'concat'}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'concat'}
+      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'concat'}
+      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'concat'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'concat'}
+      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'concat'}
+      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13', agg: 'concat'}
+      - {layers: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'concat'}
+      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'concat'}
+      - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'concat'}
     do:
       cmd: >
         python bines_agg.py
         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
         --layer_names ${item.layers}
-        --output_dir results/binned_predictor_concat_${item.layers}
+        --aggregation ${item.agg}
+        --output_dir results/binned_predictor_${item.agg}
         --hidden_dim 512
         --learning_rate 1e-4
         --batch_size 32

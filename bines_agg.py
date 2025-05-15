@@ -79,14 +79,32 @@ def compute_binned_mae(logits, true_lengths, bin_edges):
     expected = (probs * midpoints).sum(axis=1)
     return mean_absolute_error(true_lengths.cpu().numpy(), expected)
 
-# --- Concatenate embeddings from multiple layers ---
-def concatenate_layers(data, layer_names):
-    return torch.cat([data[layer] for layer in layer_names], dim=1)
+# --- Aggregate embeddings from multiple layers ---
+def aggregate_layers(data, layer_names, aggregation='concat'):
+    """
+    Aggregate embeddings from multiple layers using the specified method
+    
+    Args:
+        data: Dictionary with layer embeddings
+        layer_names: List of layer names to aggregate
+        aggregation: Method to use for aggregation ('mean', 'sum', or 'concat')
+        
+    Returns:
+        Aggregated tensor
+    """
+    if aggregation == 'mean':
+        return torch.mean(torch.stack([data[layer] for layer in layer_names]), dim=0)
+    elif aggregation == 'sum':
+        return torch.sum(torch.stack([data[layer] for layer in layer_names]), dim=0)
+    elif aggregation == 'concat':
+        return torch.cat([data[layer] for layer in layer_names], dim=1)
+    else:
+        raise ValueError(f"Unsupported aggregation method: {aggregation}")
 
 # --- Data loader and split ---
-def load_and_split_dataset(data_path, layer_names, bin_edges, seed=42):
+def load_and_split_dataset(data_path, layer_names, bin_edges, aggregation='concat', seed=42):
     data = torch.load(data_path)
-    embeddings = concatenate_layers(data, layer_names)
+    embeddings = aggregate_layers(data, layer_names, aggregation)
     labels = data["labels"].float()
 
     indices = np.random.RandomState(seed).permutation(len(labels))
@@ -106,7 +124,13 @@ def train_model(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     bin_edges = np.linspace(0, 512, 11)
-    train_set, val_set, _ = load_and_split_dataset(args.data_path, args.layer_names, bin_edges, seed=args.seed)
+    train_set, val_set, _ = load_and_split_dataset(
+        args.data_path, 
+        args.layer_names, 
+        bin_edges, 
+        aggregation=args.aggregation,
+        seed=args.seed
+    )
     input_dim = train_set.embeddings.shape[1]
 
     model = BinnedLengthPredictor(input_dim=input_dim, hidden_dim=args.hidden_dim, num_bins=len(bin_edges) - 1).to(device)
@@ -154,7 +178,9 @@ def train_model(args):
         scheduler.step(val_mae)
         if val_mae < best_val_mae - args.min_loss_improvement:
             best_val_mae = val_mae
-            torch.save(model.state_dict(), os.path.join(args.output_dir, "best_model.pt"))
+            output_dir = os.path.join(args.output_dir, f"{args.aggregation}")
+            os.makedirs(output_dir, exist_ok=True)
+            torch.save(model.state_dict(), os.path.join(output_dir, "best_model.pt"))
 
 # --- Seed ---
 def set_seed(seed):
@@ -167,6 +193,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_path', type=str, required=True)
     parser.add_argument('--layer_names', nargs='+', default=['layer_8'], help="List of layer names to aggregate")
+    parser.add_argument('--aggregation', type=str, choices=['mean', 'sum', 'concat'], default='concat',
+                        help="Method to aggregate embeddings across layers")
     parser.add_argument('--output_dir', type=str, default='./results')
     parser.add_argument('--hidden_dim', type=int, default=512)
     parser.add_argument('--learning_rate', type=float, default=1e-4)
