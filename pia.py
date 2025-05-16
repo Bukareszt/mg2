@@ -75,6 +75,7 @@ def estimate_length_with_pia_batch(model, tokenizer, prompts, device, max_new_to
                 
             response = "\n".join(lines[1:])
             response_tokens = tokenizer(response, return_tensors="pt", truncation=True).input_ids.shape[1]
+            print(f"Estimated: {estimated}, Actual: {response_tokens}")
             
             all_estimated.append(estimated)
             all_actual.append(response_tokens)
