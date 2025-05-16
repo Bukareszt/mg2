@@ -139,7 +139,7 @@ stages:
         --output_dir results/binned_predictor_trail_${item.layer}_hidden${item.hidden_dim}
         --hidden_dim ${item.hidden_dim}
         --learning_rate 1e-5
-        --batch_size 16
+        --batch_size 50
         --num_epochs 30
         --seed 42
         --min_loss_improvement 0.001
@@ -188,7 +188,7 @@ stages:
         --output_dir results/binned_predictor_${item.agg}_hidden${item.hidden_dim}
         --hidden_dim ${item.hidden_dim}
         --learning_rate 1e-5
-        --batch_size 16
+        --batch_size 50
         --num_epochs 30
         --seed 42
         --min_loss_improvement 0.001
@@ -269,7 +269,7 @@ stages:
         --output_dir results/binned_predictor_${item.layer}_threshold${item.threshold}
         --hidden_dim ${item.hidden_dim}
         --learning_rate 1e-5
-        --batch_size 16
+        --batch_size 50
         --length_threshold ${item.threshold}
         --num_epochs 30
         --seed 42
@@ -306,7 +306,7 @@ stages:
         --output_dir results/binned_predictor_${item.agg}_layers12-15_threshold${item.threshold}
         --hidden_dim ${item.hidden_dim}
         --learning_rate 1e-5
-        --batch_size 16
+        --batch_size 50
         --length_threshold ${item.threshold}
         --num_epochs 30
         --seed 42
