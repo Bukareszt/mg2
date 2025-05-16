@@ -78,8 +78,8 @@ def compute_binned_mae(logits, true_lengths, bin_edges):
     """
     Compute MAE, normalized MAE, and error correlation with prompt length.
     """
-    probs = torch.softmax(logits, dim=-1).cpu().numpy()
-    true_lengths = true_lengths.cpu().numpy()
+    probs = torch.softmax(logits, dim=-1).detach().cpu().numpy()
+    true_lengths = true_lengths.detach().cpu().numpy()
 
     midpoints = (bin_edges[:-1] + bin_edges[1:]) / 2
     expected = (probs * midpoints).sum(axis=1)
@@ -211,8 +211,8 @@ def train_model(args):
             total_loss += loss.item()
 
         train_loss = total_loss/len(train_loader)
-        test_mae, test_norm_mae, test_corr = compute_binned_mae(logits, y_bin, bin_edges)
-        logger.info(f"Test MAE: {test_mae:.4f}, Test Normalized MAE: {test_norm_mae:.4f}, Test Correlation: {test_corr:.4f}")
+        train_mae, train_norm_mae, train_corr = compute_binned_mae(logits, batch['labels'].to(device), bin_edges)
+        logger.info(f"Train MAE: {train_mae:.4f}, Train Normalized MAE: {train_norm_mae:.4f}, Train Correlation: {train_corr:.4f}")
         # Validation
         model.eval()
         all_logits = []
@@ -249,9 +249,9 @@ def train_model(args):
                 "val/normalized_mae": val_norm_mae,
                 "val/error_prompt_length_corr": val_corr,
                 "lr": optimizer.param_groups[0]['lr'],
-                "test/mae": test_mae,
-                "test/normalized_mae": test_norm_mae,
-                "test/error_prompt_length_corr": test_corr
+                "train/mae": train_mae,
+                "train/normalized_mae": train_norm_mae,
+                "train/error_prompt_length_corr": train_corr
             }
             wandb_logger.log_metrics(wandb_metrics, step=epoch)
 
@@ -278,7 +278,7 @@ def train_model(args):
             
             # Log model to wandb
             if args.use_wandb and args.log_model:
-                wandb_logger.log_model_checkpoint(
+                wandb_logger.log_model_checkpoint(  
                     model,
                     checkpoint_path,
                     f"best_model_epoch_{epoch}"
@@ -300,6 +300,123 @@ def set_seed(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+# --- Evaluation function for the model ---
+def evaluate_model(args):
+    """
+    Evaluation function for the binned length predictor model with aggregated embeddings
+    """
+    logger.info("Starting evaluation with clean memory state")
+    free_gpu_memory()
+    
+    set_seed(args.seed)
+    
+    # Initialize wandb logger for evaluation
+    if args.use_wandb:
+        config = vars(args)
+        config['phase'] = 'evaluation'
+        
+        model_name = f"eval-binned-predictor-{args.aggregation}"
+        
+        wandb_logger = Logger(
+            config=config,
+            model_name=model_name,
+            project_name=args.wandb_project,
+            enable_logging=args.use_wandb,
+            log_model=False
+        )
+    
+    # Load dataset
+    bin_edges = np.linspace(0, 512, 11)
+    _, _, test_dataset = load_and_split_dataset(
+        args.data_path, 
+        args.layer_names, 
+        bin_edges, 
+        aggregation=args.aggregation,
+        length_threshold=args.length_threshold,
+        seed=args.seed
+    )
+    
+    # Create test data loader
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, collate_fn=custom_collate_fn)
+    
+    # Setup device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Load the best model
+    try:
+        output_dir = os.path.join(args.output_dir, f"{args.aggregation}")
+        checkpoint_path = os.path.join(output_dir, "best_model.pt")
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        
+        # Extract model parameters from checkpoint
+        input_dim = checkpoint.get('input_dim')
+        hidden_dim = checkpoint.get('hidden_dim', args.hidden_dim)
+        
+        # If input_dim is not stored in the checkpoint, get it from the dataset
+        if input_dim is None:
+            input_dim = test_dataset.embeddings.shape[1]
+            
+        model = BinnedLengthPredictor(input_dim=input_dim, hidden_dim=hidden_dim, num_bins=len(bin_edges) - 1)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.to(device)
+        model.eval()
+        
+        logger.info(f"Loaded model from {checkpoint_path}")
+    except Exception as e:
+        logger.error(f"Error loading model: {e}")
+        raise
+    
+    # Evaluate
+    criterion = nn.CrossEntropyLoss()
+    test_loss = 0
+    all_logits = []
+    all_true = []
+    
+    with torch.no_grad():
+        for batch in tqdm(test_loader, desc="Evaluating"):
+            x = batch['embeddings'].to(device)
+            y_real = batch['labels'].to(device)
+            y_bin = batch['bin_labels'].to(device)
+            
+            with autocast(enabled=args.use_amp):
+                logits = model(x)
+                loss = criterion(logits, y_bin)
+            
+            test_loss += loss.item()
+            all_logits.append(logits)
+            all_true.append(y_real)
+    
+    all_logits = torch.cat(all_logits)
+    all_true = torch.cat(all_true)
+    test_mae, test_norm_mae, test_corr = compute_binned_mae(all_logits, all_true, bin_edges)
+
+    test_loss = test_loss / len(test_loader)
+    
+    # Log metrics
+    logger.info("Test Metrics:")
+    logger.info(f"  Loss: {test_loss:.4f}")
+    logger.info(f"  MAE: {test_mae:.4f}")
+    logger.info(f"  Normalized MAE: {test_norm_mae:.4f}")
+    logger.info(f"  Error-Prompt Length Correlation: {test_corr:.4f}")
+    
+    # Log test metrics to wandb
+    if args.use_wandb:
+        test_metrics_wandb = {
+            "test/loss": test_loss,
+            "test/mae": test_mae,
+            "test/normalized_mae": test_norm_mae,
+            "test/error_prompt_length_corr": test_corr
+        }
+        wandb_logger.log_metrics(test_metrics_wandb)
+        
+        wandb_logger.finish()
+    
+    # Clean up memory
+    del model
+    free_gpu_memory()
+    
+    return test_mae
 
 # --- Main ---
 if __name__ == '__main__':
@@ -337,3 +454,7 @@ if __name__ == '__main__':
     
     if args.do_train:
         train_model(args)
+    
+    if args.do_eval:
+        evaluate_model(args)
+
