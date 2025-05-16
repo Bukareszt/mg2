@@ -30,6 +30,7 @@ stages:
         --output_dir results/bert_length_predictor_metadata_${item.model}
         --batch_size 32
         --learning_rate 1e-3
+        --hidden_dim ${item.hidden_dim}
         --num_epochs 30
         --seed 42
         --use_wandb
@@ -39,7 +40,7 @@ stages:
         --early_stopping_patience 5
         --max_samples 1000
       deps:
-        - lenght_prediction.py
+        - lenght_prediction.pyx
 
   train_binned_predictors_trail:
     foreach:
