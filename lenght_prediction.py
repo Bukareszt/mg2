@@ -8,7 +8,6 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from datasets import load_from_disk
 from transformers import get_linear_schedule_with_warmup, AutoTokenizer
-from models.BasicBert import BasicBertForRegression
 import logging
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -141,7 +140,7 @@ def set_seed(seed):
     
 def get_model(args):
     """Initialize model based on arguments."""
-    return BasicBertForRegression(model_name=args.model_name, hidden_dim=args.hidden_dim)
+    return BasicBertForRegression(model_name=args.model_name)
 
 def compute_metrics(preds, labels):
     """Compute regression metrics."""
