@@ -9,7 +9,7 @@ class Logger:
     Handles logging of training progress and metrics to Weights & Biases.
     """
     def __init__(self, config, model_name, project_name="latency-prediction", 
-                 enable_logging=True, log_model=False, group=None):
+                 enable_logging=True, log_model=False):
         """
         Initialize the logger.
         
@@ -19,7 +19,6 @@ class Logger:
             project_name: Name of the project in W&B
             enable_logging: Whether to enable logging to W&B
             log_model: Whether to log the model checkpoints
-            group: Optional group name for organizing runs in W&B
         """
         self.enable_logging = enable_logging
         self.log_model = log_model
@@ -37,13 +36,13 @@ class Logger:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         run_name = f"{model_name}_{timestamp}"
         
-        # Initialize W&B with optional group parameter
+        # Initialize W&B
         self.run = wandb.init(
             project=project_name,
             name=run_name,
             config=config,
             reinit=True,
-            group=group
+            group='final_resuls'
         )
     
     def log_hyperparams(self, hyperparams):
