@@ -38,8 +38,52 @@ def estimate_length_with_pia(model, tokenizer, prompt, device, max_new_tokens=5)
 
     return estimated, response_tokens
 
+def estimate_length_with_pia_batch(model, tokenizer, prompts, device, max_new_tokens=5, batch_size=8):
+    """Process multiple prompts in batches for improved performance"""
+    all_estimated = []
+    all_actual = []
+    
+    # Process prompts in batches
+    for i in range(0, len(prompts), batch_size):
+        batch_prompts = prompts[i:i+batch_size]
+        
+        pia_prompts = []
+        for prompt in batch_prompts:
+            pia_prompt = (
+                f"{prompt.strip()}\n\n"
+                "Before responding to the above instruction, estimate the length of your response in tokens. "
+                "Print the estimated number in the first line. Then go to a new line and write the response."
+            )
+            pia_prompts.append(pia_prompt)
+        
+        # Tokenize the batch
+        inputs = tokenizer(pia_prompts, return_tensors="pt", padding=True, truncation=True).to(device)
+        
+        # Generate outputs for the entire batch
+        with torch.no_grad():
+            outputs = model.generate(**inputs, max_new_tokens=max_new_tokens + 507, do_sample=False)
+        
+        # Process each output in the batch
+        for j, output in enumerate(outputs):
+            decoded = tokenizer.decode(output, skip_special_tokens=True)
+            lines = decoded.strip().split("\n")
+            
+            try:
+                estimated = int(lines[0].strip().split()[0])
+            except Exception:
+                estimated = -1
+                
+            response = "\n".join(lines[1:])
+            response_tokens = tokenizer(response, return_tensors="pt", truncation=True).input_ids.shape[1]
+            
+            all_estimated.append(estimated)
+            all_actual.append(response_tokens)
+    
+    return all_estimated, all_actual
+
 def evaluate_pia(model_id, prompts, max_samples=1000, max_new_tokens=5, 
-                 use_wandb=False, wandb_project="pia-evaluator", wandb_name=None):
+                 use_wandb=False, wandb_project="pia-evaluator", wandb_name=None,
+                 batch_size=8):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(f"Using device: {device}")
 
@@ -48,7 +92,8 @@ def evaluate_pia(model_id, prompts, max_samples=1000, max_new_tokens=5,
         config = {
             "model_id": model_id,
             "max_samples": max_samples,
-            "max_new_tokens": max_new_tokens
+            "max_new_tokens": max_new_tokens,
+            "batch_size": batch_size
         }
         model_name = wandb_name or f"pia-{model_id.split('/')[-1]}"
         wandb_logger = Logger(
@@ -66,19 +111,27 @@ def evaluate_pia(model_id, prompts, max_samples=1000, max_new_tokens=5,
     if max_samples:
         prompts = prompts[:max_samples]
 
-    predictions = []
-    true_lengths = []
-    failed = 0
+    logger.info(f"Processing {len(prompts)} prompts with batch size {batch_size}")
+    
+    if batch_size > 1:
+        predictions, true_lengths = estimate_length_with_pia_batch(
+            model, tokenizer, prompts, device, max_new_tokens, batch_size
+        )
+    else:
+        # Fallback to non-batched processing if batch_size is 1
+        predictions = []
+        true_lengths = []
+        for prompt in tqdm(prompts, desc="Predicting with PiA"):
+            estimated, actual = estimate_length_with_pia(model, tokenizer, prompt, device, max_new_tokens)
+            predictions.append(estimated)
+            true_lengths.append(actual)
 
-    for prompt in tqdm(prompts, desc="Predicting with PiA"):
-        estimated, actual = estimate_length_with_pia(model, tokenizer, prompt, device, max_new_tokens)
-        if estimated == -1:
-            failed += 1
-        predictions.append(estimated)
-        true_lengths.append(actual)
-
+    # Convert to numpy arrays
     true_lengths = np.array(true_lengths)
     predictions = np.array(predictions)
+    
+    # Count failures
+    failed = np.sum(predictions == -1)
 
     # Metrics
     error = np.abs(true_lengths - predictions)
@@ -124,6 +177,9 @@ if __name__ == "__main__":
     parser.add_argument("--use_wandb", action="store_true", help="Whether to use Weights & Biases for logging")
     parser.add_argument("--wandb_project", type=str, default="pia-evaluator", help="Weights & Biases project name")
     parser.add_argument("--wandb_name", type=str, default=None, help="Custom run name for the wandb experiment")
+    
+    # Add batch size parameter
+    parser.add_argument("--batch_size", type=int, default=8, help="Batch size for processing prompts")
 
     args = parser.parse_args()
 
@@ -138,5 +194,6 @@ if __name__ == "__main__":
         max_new_tokens=args.max_new_tokens,
         use_wandb=args.use_wandb,
         wandb_project=args.wandb_project,
-        wandb_name=args.wandb_name
+        wandb_name=args.wandb_name,
+        batch_size=args.batch_size
     )
