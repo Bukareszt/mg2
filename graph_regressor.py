@@ -266,7 +266,7 @@ def train_model(args):
     
     # Initialize wandb logger with model name that includes dataset info
     config = vars(args)
-    config['loss_type'] = "L1Loss"  # We're using MSELoss
+    config['loss_type'] = "MSELoss"  # We're using MSELoss
     
     model_name = f"graph-regressor-{args.edge_mode}"
     
@@ -463,7 +463,8 @@ def evaluate_model(args):
             model_name=model_name,
             project_name=args.wandb_project,
             enable_logging=args.use_wandb,
-            log_model=False
+            log_model=False,
+            group=args.wandb_group  # Add group parameter for evaluation runs
         )
     
     # Load dataset and create graph dataset
@@ -530,8 +531,8 @@ def evaluate_model(args):
             "test/mse": test_metrics['mse'],
             "test/rmse": test_metrics['rmse'],
             "test/r2": test_metrics['r2'],
-            "val/normalized_mae": test_metrics['normalized_mae'],
-            "val/error_prompt_length_corr": test_metrics['error_prompt_length_corr'],
+            "test/normalized_mae": test_metrics['normalized_mae'],
+            "test/error_prompt_length_corr": test_metrics['error_prompt_length_corr'],
         }
         wandb_logger.log_metrics(test_metrics_wandb)
         
@@ -604,6 +605,8 @@ def main():
                         help="Weights & Biases project name")
     parser.add_argument("--log_model", action="store_true",
                         help="Whether to log model checkpoints to W&B")
+    parser.add_argument("--wandb_group", type=str, default=None,
+                        help="Weights & Biases group name for experiment comparison")
 
     args = parser.parse_args()
     

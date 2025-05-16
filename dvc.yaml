@@ -117,7 +117,6 @@ stages:
         --use_amp
         --use_wandb
         --wandb_project embeddings-length-predictor
-        --do_train
         --do_eval
         --early_stopping_patience 5
       deps:
