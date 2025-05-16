@@ -347,7 +347,6 @@ stages:
          --hidden_dim ${item.hidden_dim}
          --seed 42
          --use_amp
-         --do_train
          --num_workers 4
          --edge_mode ${item.edge_mode}
          --use_wandb
