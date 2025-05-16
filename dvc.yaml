@@ -138,8 +138,8 @@ stages:
         --layer_name ${item.layer}
         --output_dir results/binned_predictor_trail_${item.layer}_hidden${item.hidden_dim}
         --hidden_dim ${item.hidden_dim}
-        --learning_rate 1e-5
-        --batch_size 50
+        --learning_rate 1e-4
+        --batch_size 32
         --num_epochs 30
         --seed 42
         --min_loss_improvement 0.001
@@ -187,8 +187,8 @@ stages:
         --aggregation ${item.agg}
         --output_dir results/binned_predictor_${item.agg}_hidden${item.hidden_dim}
         --hidden_dim ${item.hidden_dim}
-        --learning_rate 1e-5
-        --batch_size 50
+        --learning_rate 1e-4
+        --batch_size 32
         --num_epochs 30
         --seed 42
         --min_loss_improvement 0.001
@@ -234,7 +234,7 @@ stages:
         --length_threshold ${item.threshold}
         --do_train
         --do_eval
-        --batch_size 16
+        --batch_size 32
         --learning_rate 1e-4
         --num_epochs 30
         --hidden_dim ${item.hidden_dim}
@@ -268,8 +268,8 @@ stages:
         --layer_name ${item.layer}
         --output_dir results/binned_predictor_${item.layer}_threshold${item.threshold}
         --hidden_dim ${item.hidden_dim}
-        --learning_rate 1e-5
-        --batch_size 50
+        --learning_rate 1e-4
+        --batch_size 32
         --length_threshold ${item.threshold}
         --num_epochs 30
         --seed 42
@@ -304,9 +304,9 @@ stages:
         --layer_names ${item.layers}
         --aggregation ${item.agg}
         --output_dir results/binned_predictor_${item.agg}_layers12-15_threshold${item.threshold}
-        --hidden_dim ${item.hidden_dim}
-        --learning_rate 1e-5
-        --batch_size 50
+        --hidden_dim 512
+        --learning_rate 1e-4
+        --batch_size 32
         --length_threshold ${item.threshold}
         --num_epochs 30
         --seed 42
