@@ -83,7 +83,7 @@ def estimate_length_with_pia_batch(model, tokenizer, prompts, device, max_new_to
 
 def evaluate_pia(model_id, prompts, max_samples=1000, max_new_tokens=5, 
                  use_wandb=False, wandb_project="pia-evaluator", wandb_name=None,
-                 batch_size=8):
+                 batch_size=4):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(f"Using device: {device}")
 
