@@ -294,7 +294,7 @@ stages:
         --do_train
         --do_eval
         --batch_size 16
-        --learning_rate 1e-3
+        --learning_rate 1e-4
         --num_epochs 30
         --hidden_dim ${item.hidden_dim}
         --seed 42
@@ -364,7 +364,7 @@ stages:
         --aggregation ${item.agg}
         --output_dir results/binned_predictor_${item.agg}_layers12-15_threshold${item.threshold}
         --hidden_dim ${item.hidden_dim}
-        --learning_rate 1e-3
+        --learning_rate 1e-4
         --batch_size 16
         --length_threshold ${item.threshold}
         --num_epochs 30
