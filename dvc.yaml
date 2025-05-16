@@ -351,7 +351,6 @@ stages:
          --edge_mode ${item.edge_mode}
          --use_wandb
          --wandb_project embeddings-length-predictor
-         --do_train
          --do_eval
        deps:
          - graph_regressor.py
