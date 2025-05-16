@@ -21,7 +21,7 @@ stages:
     foreach:
       - { model: "bert-base-uncased", hidden_dim: 512, metadata: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2_metadata.pt" }
       - { model: "bert-base-uncased", hidden_dim: 256, metadata: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2_metadata.pt" }
-      - { model: "bert-base-uncased", hidden_dim: 128, metadata: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2_metadata.pt" }
+      - { model: "bert-base-uncased", hidden_dim: 256, metadata: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2_metadata.pt" }
     do:
       cmd: >
         python lenght_prediction.py
@@ -30,7 +30,6 @@ stages:
         --output_dir results/bert_length_predictor_metadata_${item.model}
         --batch_size 32
         --learning_rate 1e-3
-        --hidden_dim ${item.hidden_dim}
         --num_epochs 30
         --seed 42
         --use_wandb
@@ -39,8 +38,9 @@ stages:
         --do_eval
         --early_stopping_patience 5
         --max_samples 1000
+        --hidden_dim ${item.hidden_dim}
       deps:
-        - lenght_prediction.pyx
+        - lenght_prediction.py
 
   train_binned_predictors_trail:
     foreach:
