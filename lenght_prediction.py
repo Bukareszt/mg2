@@ -145,7 +145,7 @@ def set_seed(seed):
     
 def get_model(args):
     """Initialize model based on arguments."""
-    return BasicBertForRegression(model_name=args.model_name)
+    return BasicBertForRegression(model_name=args.model_name, hidden_dim=args.hidden_dim)
 
 def compute_metrics(preds, labels):
     """Compute regression metrics."""
@@ -626,6 +626,8 @@ def main():
                        help="Number of epochs with no improvement after which training will be stopped")
     parser.add_argument("--seed", type=int, default=42,
                        help="Random seed for reproducibility")
+    parser.add_argument("--hidden_dim", type=int, default=128,
+                       help="Hidden dimension for the model")
     
     # Wandb logging arguments
     parser.add_argument("--use_wandb", action="store_true",
