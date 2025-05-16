@@ -463,8 +463,7 @@ def evaluate_model(args):
             model_name=model_name,
             project_name=args.wandb_project,
             enable_logging=args.use_wandb,
-            log_model=False,
-            group=args.wandb_group  # Add group parameter for evaluation runs
+            log_model=False
         )
     
     # Load dataset and create graph dataset
