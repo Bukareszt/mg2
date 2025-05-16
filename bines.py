@@ -185,8 +185,8 @@ def train_model(args):
             total_loss += loss.item()
 
         train_loss = total_loss/len(train_loader)
-        test_mae, test_norm_mae, test_corr = compute_binned_metrics(logits, y_bin, bin_edges)
-        logger.info(f"Test MAE: {test_mae:.4f}, Test Normalized MAE: {test_norm_mae:.4f}, Test Correlation: {test_corr:.4f}")
+        train_mae, train_norm_mae, train_corr = compute_binned_metrics(logits, y_bin, bin_edges)
+        logger.info(f"Train MAE: {train_mae:.4f}, Train Normalized MAE: {train_norm_mae:.4f}, Train Correlation: {train_corr:.4f}")
 
         # Validation
         model.eval()
@@ -224,9 +224,9 @@ def train_model(args):
                 "val/normalized_mae": val_norm_mae,
                 "val/error_prompt_length_corr": val_corr,
                 "lr": optimizer.param_groups[0]['lr'],
-                "test/mae": test_mae,
-                "test/normalized_mae": test_norm_mae,
-                "test/error_prompt_length_corr": test_corr
+                "train/mae": train_mae,
+                "train/normalized_mae": train_norm_mae,
+                "train/error_prompt_length_corr": train_corr
             }
             wandb_logger.log_metrics(wandb_metrics, step=epoch)
 
