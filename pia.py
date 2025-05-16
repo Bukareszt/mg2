@@ -179,7 +179,7 @@ if __name__ == "__main__":
     parser.add_argument("--wandb_name", type=str, default=None, help="Custom run name for the wandb experiment")
     
     # Add batch size parameter
-    parser.add_argument("--batch_size", type=int, default=8, help="Batch size for processing prompts")
+    parser.add_argument("--batch_size", type=int, default=2, help="Batch size for processing prompts")
 
     args = parser.parse_args()
 
