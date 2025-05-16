@@ -101,7 +101,7 @@ stages:
       cmd: >
         python pia.py
         --model_id ${item.model}
-        --metadata_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_metadata.pt
+        --metadata_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2_metadata.pt
         --max_samples 1000
         --max_new_tokens ${item.max_new_tokens}
         --use_wandb
