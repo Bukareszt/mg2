@@ -266,7 +266,7 @@ def train_model(args):
     
     # Initialize wandb logger with model name that includes dataset info
     config = vars(args)
-    config['loss_type'] = "MSELoss"  # We're using MSELoss
+    config['loss_type'] = "L1Loss"  # We're using L1Loss
     
     model_name = f"graph-regressor-{args.edge_mode}"
     
