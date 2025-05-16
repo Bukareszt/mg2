@@ -327,7 +327,7 @@ stages:
       deps:
         - bines_agg.py
 
-  train_graph_regressors_thresholds:
+  train_graph_regressors:
      foreach:
        - { edge_mode: 'fully_connected', hidden_dim: 128 }
  #      - { edge_mode: 'sequential', hidden_dim: 128 }
