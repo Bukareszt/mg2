@@ -180,7 +180,6 @@ stages:
       
       - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 512}
     do:
-    do:
       cmd: >
         python bines_agg.py
         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
