@@ -510,7 +510,7 @@ def evaluate_model(args):
         raise
     
     # Evaluate
-    loss_fn = nn.MSELoss()
+    loss_fn = nn.L1Loss()
     test_metrics = evaluate(model, test_loader, loss_fn, device, use_amp=args.use_amp)
     
     # Log metrics
