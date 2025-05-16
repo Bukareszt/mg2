@@ -67,7 +67,7 @@ def estimate_length_with_pia_batch(model, tokenizer, prompts, device, max_new_to
         for j, output in enumerate(outputs):
             decoded = tokenizer.decode(output, skip_special_tokens=True)
             lines = decoded.strip().split("\n")
-            
+            print(lines)
             try:
                 estimated = int(lines[0].strip().split()[0])
             except Exception:
