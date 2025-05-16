@@ -123,22 +123,6 @@ stages:
 
   train_binned_predictors_trail:
     foreach:
-      - {layer: 'layer_8', hidden_dim: 128}
-      - {layer: 'layer_9', hidden_dim: 128}
-      - {layer: 'layer_10', hidden_dim: 128}
-      - {layer: 'layer_11', hidden_dim: 128}
-      - {layer: 'layer_12', hidden_dim: 128}
-      - {layer: 'layer_13', hidden_dim: 128}
-      - {layer: 'layer_14', hidden_dim: 128}
-      - {layer: 'layer_15', hidden_dim: 128}
-      - {layer: 'layer_8', hidden_dim: 256}
-      - {layer: 'layer_9', hidden_dim: 256}
-      - {layer: 'layer_10', hidden_dim: 256}
-      - {layer: 'layer_11', hidden_dim: 256}
-      - {layer: 'layer_12', hidden_dim: 256}
-      - {layer: 'layer_13', hidden_dim: 256}
-      - {layer: 'layer_14', hidden_dim: 256}
-      - {layer: 'layer_15', hidden_dim: 256}
       - {layer: 'layer_8', hidden_dim: 512}
       - {layer: 'layer_9', hidden_dim: 512}
       - {layer: 'layer_10', hidden_dim: 512}
@@ -154,7 +138,7 @@ stages:
         --layer_name ${item.layer}
         --output_dir results/binned_predictor_trail_${item.layer}_hidden${item.hidden_dim}
         --hidden_dim ${item.hidden_dim}
-        --learning_rate 1e-4
+        --learning_rate 1e-5
         --batch_size 16
         --num_epochs 30
         --seed 42
@@ -172,72 +156,30 @@ stages:
     foreach:
       # Mean aggregation with hidden_dim variants
       # 3 layers
-      - {layers: 'layer_10 layer_11 layer_12', agg: 'mean', hidden_dim: 128}
-      - {layers: 'layer_11 layer_12 layer_13', agg: 'mean', hidden_dim: 128}
-      - {layers: 'layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 128}
-      - {layers: 'layer_10 layer_11 layer_12', agg: 'mean', hidden_dim: 256}
-      - {layers: 'layer_11 layer_12 layer_13', agg: 'mean', hidden_dim: 256}
-      - {layers: 'layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 256}
       - {layers: 'layer_10 layer_11 layer_12', agg: 'mean', hidden_dim: 512}
       - {layers: 'layer_11 layer_12 layer_13', agg: 'mean', hidden_dim: 512}
       - {layers: 'layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 512}
       
       # 4 layers
-      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'mean', hidden_dim: 128}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 128}
-      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 128}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'mean', hidden_dim: 256}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 256}
-      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 256}
       - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'mean', hidden_dim: 512}
       - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 512}
       - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 512}
       
-      # 5 layers
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 128}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 128}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'mean', hidden_dim: 256}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 256}
-      
       # 6 layers
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 128}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 256}
       - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 512}
 
       # 3 layers
-      - {layers: 'layer_10 layer_11 layer_12', agg: 'sum', hidden_dim: 128}
-      - {layers: 'layer_11 layer_12 layer_13', agg: 'sum', hidden_dim: 128}
-      - {layers: 'layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 128}
-      - {layers: 'layer_10 layer_11 layer_12', agg: 'sum', hidden_dim: 256}
-      - {layers: 'layer_11 layer_12 layer_13', agg: 'sum', hidden_dim: 256}
-      - {layers: 'layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 256}
       - {layers: 'layer_10 layer_11 layer_12', agg: 'sum', hidden_dim: 512}
       - {layers: 'layer_11 layer_12 layer_13', agg: 'sum', hidden_dim: 512}
       - {layers: 'layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 512}
       
       # 4 layers
-      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'sum', hidden_dim: 128}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 128}
-      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 128}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'sum', hidden_dim: 256}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 256}
-      - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 256}
       - {layers: 'layer_10 layer_11 layer_12 layer_13', agg: 'sum', hidden_dim: 512}
       - {layers: 'layer_11 layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 512}
       - {layers: 'layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 512}
       
-      # 5 layers
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 128}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 128}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14', agg: 'sum', hidden_dim: 256}
-      - {layers: 'layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 256}
-      
-      # 6 layers
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 128}
-      - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 256}
       - {layers: 'layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 512}
-      # Additional configurations for other layer combinations and aggregation methods can be added similarly
-      # ... (repeat pattern for other configurations)
+    do:
     do:
       cmd: >
         python bines_agg.py
@@ -246,7 +188,7 @@ stages:
         --aggregation ${item.agg}
         --output_dir results/binned_predictor_${item.agg}_hidden${item.hidden_dim}
         --hidden_dim ${item.hidden_dim}
-        --learning_rate 1e-4
+        --learning_rate 1e-5
         --batch_size 16
         --num_epochs 30
         --seed 42
@@ -327,7 +269,7 @@ stages:
         --layer_name ${item.layer}
         --output_dir results/binned_predictor_${item.layer}_threshold${item.threshold}
         --hidden_dim ${item.hidden_dim}
-        --learning_rate 1e-3
+        --learning_rate 1e-5
         --batch_size 16
         --length_threshold ${item.threshold}
         --num_epochs 30
@@ -364,7 +306,7 @@ stages:
         --aggregation ${item.agg}
         --output_dir results/binned_predictor_${item.agg}_layers12-15_threshold${item.threshold}
         --hidden_dim ${item.hidden_dim}
-        --learning_rate 1e-4
+        --learning_rate 1e-5
         --batch_size 16
         --length_threshold ${item.threshold}
         --num_epochs 30

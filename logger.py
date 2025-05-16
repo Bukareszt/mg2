@@ -42,7 +42,7 @@ class Logger:
             name=run_name,
             config=config,
             reinit=True,
-            group='final'
+            group='final_resuls'
         )
     
     def log_hyperparams(self, hyperparams):
