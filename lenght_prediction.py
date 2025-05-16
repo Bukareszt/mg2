@@ -3,11 +3,11 @@ import argparse
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from datasets import load_from_disk
-from transformers import get_linear_schedule_with_warmup
+from transformers import get_linear_schedule_with_warmup, AutoTokenizer
 from models.BasicBert import BasicBertForRegression
 import logging
 from tqdm import tqdm
@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from logger import Logger
 import csv
+import random
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -22,11 +24,93 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Add a new dataset class for metadata format
+class MetadataDataset(Dataset):
+    def __init__(self, prompts, lengths, tokenizer, max_length=512):
+        self.prompts = prompts
+        self.lengths = lengths
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        
+    def __len__(self):
+        return len(self.prompts)
+    
+    def __getitem__(self, idx):
+        prompt = self.prompts[idx]
+        length = self.lengths[idx]
+        
+        encoding = self.tokenizer(
+            prompt,
+            truncation=True,
+            max_length=self.max_length,
+            padding="max_length",
+            return_tensors="pt"
+        )
+        
+        return {
+            "input_ids": encoding["input_ids"].squeeze(),
+            "attention_mask": encoding["attention_mask"].squeeze(),
+            "labels": torch.tensor(length, dtype=torch.float)
+        }
+
+# Add function to load and process metadata
+def process_metadata(metadata_path, tokenizer, max_samples=None, train_ratio=0.7, val_ratio=0.15):
+    logger.info(f"Loading metadata from {metadata_path}")
+    metadata = torch.load(metadata_path)
+    
+    prompts = metadata["queries"]
+    # For actual lengths, we'll either use metadata["lengths"] if it exists
+    # or we need to compute them (tokenize the outputs)
+    
+    # If metadata contains precomputed lengths, use those
+    if "lengths" in metadata:
+        lengths = metadata["lengths"]
+    elif "responses" in metadata:
+        # Compute lengths from responses
+        responses = metadata["responses"]
+        lengths = [len(tokenizer.encode(resp)) for resp in responses]
+    else:
+        raise ValueError("Metadata must contain either 'lengths' or 'responses'")
+    
+    # Limit sample size if specified
+    if max_samples and max_samples < len(prompts):
+        indices = random.sample(range(len(prompts)), max_samples)
+        prompts = [prompts[i] for i in indices]
+        lengths = [lengths[i] for i in indices]
+    
+    # Create dataset splits
+    data_size = len(prompts)
+    indices = list(range(data_size))
+    random.shuffle(indices)
+    
+    train_end = int(train_ratio * data_size)
+    val_end = train_end + int(val_ratio * data_size)
+    
+    train_indices = indices[:train_end]
+    val_indices = indices[train_end:val_end]
+    test_indices = indices[val_end:]
+    
+    train_prompts = [prompts[i] for i in train_indices]
+    train_lengths = [lengths[i] for i in train_indices]
+    
+    val_prompts = [prompts[i] for i in val_indices]
+    val_lengths = [lengths[i] for i in val_indices]
+    
+    test_prompts = [prompts[i] for i in test_indices]
+    test_lengths = [lengths[i] for i in test_indices]
+    
+    return (
+        (train_prompts, train_lengths),
+        (val_prompts, val_lengths),
+        (test_prompts, test_lengths)
+    )
+
 def set_seed(seed):
     """Set seeds for reproducibility."""
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
+    random.seed(seed)
     
 def get_model(args):
     """Initialize model based on arguments."""
@@ -38,11 +122,22 @@ def compute_metrics(preds, labels):
     mse = mean_squared_error(labels, preds)
     rmse = np.sqrt(mse)
     r2 = r2_score(labels, preds)
+    
+    # Add PiA-style metrics
+    error = np.abs(np.array(preds) - np.array(labels))
+    acc_50 = (error < 50).mean()
+    acc_100 = (error < 100).mean()
+    
+    # Calculate normalized MAE
+    nonzero_mask = np.array(labels) != 0
+    norm_mae = np.mean(np.abs(np.array(preds)[nonzero_mask] - np.array(labels)[nonzero_mask]) / np.array(labels)[nonzero_mask])
+    
     return {
         "mae": mae,
+        "norm_mae": norm_mae,
         "mse": mse,
         "rmse": rmse,
-        "r2": r2
+        "r2": r2,
     }
 
 def extract_dataset_info(data_dir):
@@ -103,13 +198,13 @@ def train(args):
     """Training function."""
     set_seed(args.seed)
     
-    # Extract dataset info from data directory path
-    dataset_info = extract_dataset_info(args.data_dir)
+    # Initialize tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
     
-    # Initialize wandb logger with model name that includes dataset info
+    # Initialize wandb logger
     config = vars(args)
-    # Add dataset info to config for better tracking in wandb
-    config['dataset_info'] = dataset_info
     config['loss_type'] = "L1Loss"  # Always use L1Loss
     
     wandb_logger = Logger(
@@ -120,10 +215,25 @@ def train(args):
         log_model=args.log_model
     )
     
-    # Load datasets
-    logger.info(f"Loading datasets from {args.data_dir}")
-    train_dataset = load_from_disk(f"{args.data_dir}_train")
-    val_dataset = load_from_disk(f"{args.data_dir}_val")
+    # Load and process data
+    if args.metadata_path:
+        # Process metadata
+        (train_prompts, train_lengths), (val_prompts, val_lengths), _ = process_metadata(
+            args.metadata_path, tokenizer, args.max_samples, 
+            train_ratio=0.7, val_ratio=0.15
+        )
+        
+        # Create datasets
+        train_dataset = MetadataDataset(train_prompts, train_lengths, tokenizer)
+        val_dataset = MetadataDataset(val_prompts, val_lengths, tokenizer)
+        
+        logger.info(f"Created train dataset with {len(train_dataset)} samples")
+        logger.info(f"Created validation dataset with {len(val_dataset)} samples")
+    else:
+        # Load datasets from disk (original behavior)
+        logger.info(f"Loading datasets from {args.data_dir}")
+        train_dataset = load_from_disk(f"{args.data_dir}_train")
+        val_dataset = load_from_disk(f"{args.data_dir}_val")
     
     # Create data loaders
     train_dataloader = DataLoader(
@@ -313,28 +423,40 @@ def evaluate(args):
     """Evaluation function."""
     set_seed(args.seed)
     
-    # Extract dataset info from data directory path
-    dataset_info = extract_dataset_info(args.data_dir)
+    # Initialize tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
     
     # Initialize wandb logger for test evaluation if requested
     if args.use_wandb:
         config = vars(args)
         config['mode'] = 'evaluation'
-        # Add dataset info to config for better tracking in wandb
-        config['dataset_info'] = dataset_info
         config['loss_type'] = "L1Loss"  # Always use L1Loss
         
         wandb_logger = Logger(
             config=config,
-            model_name=f"bert-length-predictor-eval-{args.model_name.split('/')[-1]}-{dataset_info}",
+            model_name=f"bert-length-predictor-eval-{args.model_name.split('/')[-1]}",
             project_name=args.wandb_project,
             enable_logging=args.use_wandb,
             log_model=False
         )
     
     # Load test dataset
-    logger.info(f"Loading test dataset from {args.data_dir}_test")
-    test_dataset = load_from_disk(f"{args.data_dir}_test")
+    if args.metadata_path:
+        # Process metadata
+        _, _, (test_prompts, test_lengths) = process_metadata(
+            args.metadata_path, tokenizer, args.max_samples, 
+            train_ratio=0.7, val_ratio=0.15
+        )
+        
+        # Create test dataset
+        test_dataset = MetadataDataset(test_prompts, test_lengths, tokenizer)
+        logger.info(f"Created test dataset with {len(test_dataset)} samples")
+    else:
+        # Load datasets from disk (original behavior)
+        logger.info(f"Loading test dataset from {args.data_dir}_test")
+        test_dataset = load_from_disk(f"{args.data_dir}_test")
     
     test_dataloader = DataLoader(
         test_dataset, 
@@ -411,7 +533,8 @@ def evaluate(args):
             "test/mae": metrics['mae'],
             "test/mse": metrics['mse'],
             "test/rmse": metrics['rmse'],
-            "test/r2": metrics['r2']
+            "test/r2": metrics['r2'],
+            "test/norm_mae": metrics['norm_mae'],
         }
         wandb_logger.log_metrics(test_metrics)
         
@@ -442,8 +565,12 @@ def main():
     parser = argparse.ArgumentParser()
     
     # Data arguments
-    parser.add_argument("--data_dir", type=str, required=True, 
+    parser.add_argument("--data_dir", type=str, default=None,
                         help="Path to the processed dataset (without _train, _val, _test suffix)")
+    parser.add_argument("--metadata_path", type=str, default=None,
+                        help="Path to metadata file used in PiA evaluation")
+    parser.add_argument("--max_samples", type=int, default=None,
+                       help="Maximum number of samples to use from metadata")
     
     # Model arguments
     parser.add_argument("--model_name", type=str, default="bert-base-uncased",
@@ -496,6 +623,10 @@ def main():
                        help="Minimum validation loss improvement to consider as significant")
     
     args = parser.parse_args()
+    
+    # Validate arguments
+    if not args.data_dir and not args.metadata_path:
+        raise ValueError("Either --data_dir or --metadata_path must be provided")
     
     # Update the config with the loss type
     config = vars(args)

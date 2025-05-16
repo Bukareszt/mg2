@@ -16,6 +16,31 @@ stages:
 #        --do_eval
 #        --do_train
 
+  # Add new stage to train BERT length prediction with metadata
+  train_bert_length_predictors_metadata:
+    foreach:
+      - { model: "bert-base-uncased", hidden_dim: 512, metadata: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2_metadata.pt" }
+      - { model: "bert-base-uncased", hidden_dim: 256, metadata: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2_metadata.pt" }
+      - { model: "bert-base-uncased", hidden_dim: 128, metadata: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2_metadata.pt" }
+    do:
+      cmd: >
+        python lenght_prediction.py
+        --metadata_path ${item.metadata}
+        --model_name ${item.model}
+        --output_dir results/bert_length_predictor_metadata_${item.model}
+        --batch_size 32
+        --learning_rate 1e-3
+        --num_epochs 30
+        --seed 42
+        --use_wandb
+        --wandb_project output-length-prediction
+        --do_train
+        --do_eval
+        --early_stopping_patience 5
+        --max_samples 1000
+      deps:
+        - lenght_prediction.py
+
   train_binned_predictors_trail:
     foreach:
       - {layer: 'layer_8', hidden_dim: 128}
