@@ -85,18 +85,23 @@ def process_metadata(metadata_path, tokenizer, max_samples=None, train_ratio=0.7
     metadata = torch.load(metadata_path)
     
     prompts = metadata["queries"]
-    # For actual lengths, we'll either use metadata["lengths"] if it exists
-    # or we need to compute them (tokenize the outputs)
     
-    # If metadata contains precomputed lengths, use those
+    # If metadata contains precomputed lengths, use those - check multiple possible field names
     if "lengths" in metadata:
         lengths = metadata["lengths"]
+    elif "generated_lengths" in metadata:
+        lengths = metadata["generated_lengths"]
     elif "responses" in metadata:
-        # Compute lengths from responses
+        # Compute lengths from responses using the same method as in pia.py
         responses = metadata["responses"]
-        lengths = [len(tokenizer.encode(resp)) for resp in responses]
+        # Use the same tokenization approach as in pia.py
+        lengths = []
+        for response in responses:
+            # Calculate token length the same way as in pia.py
+            response_tokens = tokenizer(response, return_tensors="pt", truncation=True).input_ids.shape[1]
+            lengths.append(response_tokens)
     else:
-        raise ValueError("Metadata must contain either 'lengths' or 'responses'")
+        raise ValueError("Metadata must contain either 'lengths', 'generated_lengths' or 'responses'")
     
     # Limit sample size if specified
     if max_samples and max_samples < len(prompts):
