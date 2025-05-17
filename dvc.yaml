@@ -162,6 +162,7 @@ stages:
         --edge_mode ${item.edge_mode}
         --use_wandb
         --wandb_project embeddings-length-predictor
+        --length_upper_threshold ${item.length_upper_threshold}
       deps:
         - graph_regressor.py
 
