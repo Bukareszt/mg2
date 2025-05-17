@@ -320,9 +320,3 @@ stages:
         --use_wandb
         --wandb_project embeddings-length-predictor
         --wandb_name shap_analysis_${item.edge_mode}_hidden${item.hidden_dim}_threshold${item.threshold}
-      deps:
-        - shap.py
-        - results/graph_regressor_${item.edge_mode}_threshold${item.threshold}/model.pt
-      outs:
-        - results/graph_regressor_${item.edge_mode}_threshold${item.threshold}/shap_layer_importance.png:
-            cache: false
