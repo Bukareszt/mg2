@@ -151,7 +151,6 @@ stages:
         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
         --output_dir results/graph_regressor_${item.edge_mode}_threshold${item.threshold}
         --length_threshold ${item.threshold}
-        --do_train
         --do_eval
         --batch_size 32
         --learning_rate 1e-3
