@@ -46,8 +46,7 @@ def estimate_length_with_pia_batch(model, tokenizer, prompts, device, max_new_to
         for prompt in batch_prompts:
             pia_prompt = (
                 f"{prompt.strip()}\n\n"
-                "Before responding to the above instruction, estimate the length of your response in tokens. "
-                "Print the estimated number in the first line. Then go to a new line and write the response."
+         "Estimate the number of tokens your response to the above instruction would contain. Only print the number. Do not write the response."
             )
             pia_prompts.append(pia_prompt)
         
@@ -68,27 +67,18 @@ def estimate_length_with_pia_batch(model, tokenizer, prompts, device, max_new_to
             for idx, line in enumerate(lines):
                 print(f"{idx}: {line}")
 
-            # Try to extract the first number from the first non-empty line
-            estimated = -1
-            for line in lines:
-                line = line.strip()
-                if line:  # skip empty lines
-                    tokens = line.split()
-                    for token in tokens:
-                        if token.isdigit():
-                            estimated = int(token)
-                            break
-                    break  # we only care about the first non-empty line
+            # Extract all numbers from the decoded output
+            all_numbers = [int(num) for num in re.findall(r"\d+", decoded)]
 
             # Join the rest of the lines as the actual response
             response = "\n".join(lines[1:]).strip()
             response_tokens = tokenizer(response, return_tensors="pt", truncation=True).input_ids.shape[1]
 
-            print(f"Estimated: {estimated}, Actual: {response_tokens}")
+            print(f"Extracted Numbers: {all_numbers}, Actual: {response_tokens}")
 
-            all_estimated.append(estimated)
+            all_estimated.append(all_numbers)
             all_actual.append(response_tokens)
-    
+
     return all_estimated, all_actual
 
 def evaluate_pia(model_id, prompts, max_samples=1000, max_new_tokens=5, 
