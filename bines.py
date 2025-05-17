@@ -102,13 +102,13 @@ def compute_binned_metrics(logits, true_lengths, bin_edges):
 
 
 # --- Data loader and split ---
-def load_and_split_dataset(data_path, layer_name, bin_edges, length_threshold=0, seed=42):
+def load_and_split_dataset(data_path, layer_name, bin_edges, length_threshold=0, seed=42, apply_threshold=False):
     data = torch.load(data_path)
     embeddings = data[layer_name]
     labels = data["labels"].float()
     
     # Filter out tokens with labels less than threshold
-    if length_threshold > 0:
+    if length_threshold > 0 and apply_threshold:
         valid_indices = torch.where(labels >= length_threshold)[0]
         logger.info(f"Filtering tokens with length < {length_threshold}: {len(labels)} → {len(valid_indices)} tokens")
         
@@ -149,7 +149,8 @@ def train_model(args):
         args.layer_name, 
         bin_edges,
         args.length_threshold,
-        seed=args.seed
+        seed=args.seed,
+        apply_threshold=False  # Don't apply threshold during training
     )
     input_dim = train_set.embeddings.shape[1]
     logger.info(f"Input dimension: {input_dim}, using layer {args.layer_name}")
@@ -298,7 +299,14 @@ def evaluate_model(args):
     
     # Load dataset
     bin_edges = np.linspace(0, 512, 11)
-    _, _, test_dataset = load_and_split_dataset(args.data_path, args.layer_name, bin_edges, seed=args.seed)
+    _, _, test_dataset = load_and_split_dataset(
+        args.data_path, 
+        args.layer_name, 
+        bin_edges, 
+        length_threshold=args.length_threshold, 
+        seed=args.seed,
+        apply_threshold=True  # Apply threshold during evaluation
+    )
     
     # Create test data loader
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, collate_fn=custom_collate_fn)

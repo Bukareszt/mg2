@@ -304,7 +304,6 @@ stages:
     foreach:
       # Analyze different models with varying configurations
       - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 0 }
-      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 80 }
       - { edge_mode: 'fully_connected', hidden_dim: 256, threshold: 0 }
       - { edge_mode: 'fully_connected', hidden_dim: 128, threshold: 0 }
     do:
