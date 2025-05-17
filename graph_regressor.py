@@ -17,7 +17,6 @@ import gc
 import argparse
 from tqdm import tqdm
 from logger import Logger  # Import the Logger class
-from torch_geometric.nn.models import GNNExplainer
 import matplotlib.pyplot as plt
 
 # Set up logging
@@ -469,9 +468,6 @@ def train_model(args):
     free_gpu_memory()
     
     return best_val_loss
-
-
-def explain_model_predictions(args, model, dataset, device, wandb_logger=None):
     """
     Run GNNExplainer on the trained model to explain predictions.
     """
@@ -688,10 +684,7 @@ def evaluate_model(args):
             "test/error_prompt_length_corr": test_metrics['error_prompt_length_corr'],
         }
         wandb_logger.log_metrics(test_metrics_wandb)
-    
-    # Run GNNExplainer if requested
-    if args.explain:
-        explain_model_predictions(args, model, test_dataset, device, wandb_logger)
+
         
     # Finish wandb logging
     if args.use_wandb and wandb_logger:
