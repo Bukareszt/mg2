@@ -17,6 +17,8 @@ import gc
 import argparse
 from tqdm import tqdm
 from logger import Logger  # Import the Logger class
+from torch_geometric.nn.models import GNNExplainer
+import matplotlib.pyplot as plt
 
 # Set up logging
 logging.basicConfig(
@@ -452,6 +454,120 @@ def train_model(args):
     return best_val_loss
 
 
+def explain_model_predictions(args, model, dataset, device, wandb_logger=None):
+    """
+    Run GNNExplainer on the trained model to explain predictions.
+    """
+    logger.info("Running GNNExplainer to interpret model predictions...")
+    model.eval()
+    
+    # Create output directory for explanations
+    explanation_dir = os.path.join(args.output_dir, "explanations")
+    os.makedirs(explanation_dir, exist_ok=True)
+    
+    # Initialize explainer
+    explainer = GNNExplainer(
+        model=model,
+        epochs=100,
+        return_type='regression'
+    )
+    
+    # Select a subset of examples to explain
+    num_examples = min(10, len(dataset))
+    indices = list(range(len(dataset)))
+    random.shuffle(indices)
+    selected_indices = indices[:num_examples]
+    
+    # Track average feature importance across examples
+    layer_importance = []
+    
+    for i, idx in enumerate(selected_indices):
+        logger.info(f"Explaining example {i+1}/{num_examples} (dataset index {idx})...")
+        
+        # Get data sample
+        data = dataset[idx].to(device)
+        
+        # Run explainer
+        node_feat_mask, edge_mask = explainer.explain_graph(
+            x=data.x, 
+            edge_index=data.edge_index,
+            batch=None  # Single graph, no batch
+        )
+        
+        # Store node feature importance for later analysis
+        layer_importance.append(node_feat_mask.detach().cpu().numpy())
+        
+        # Log feature and edge importance
+        logger.info(f"Example {idx} (true token length: {data.y.item():.1f}):")
+        logger.info(f"  Node feature importance: {node_feat_mask.tolist()}")
+        logger.info(f"  Edge importance: {edge_mask.tolist()}")
+        
+        # Visualize and save explanation
+        try:
+            plt.figure(figsize=(12, 8))
+            
+            # Plot node feature importance
+            plt.subplot(2, 1, 1)
+            plt.bar(range(len(node_feat_mask)), node_feat_mask.detach().cpu().numpy())
+            plt.title(f"Layer feature importance for example {idx}")
+            plt.xlabel("Feature dimension")
+            plt.ylabel("Importance")
+            
+            # Plot edge importance
+            plt.subplot(2, 1, 2)
+            plt.bar(range(len(edge_mask)), edge_mask.detach().cpu().numpy())
+            plt.title(f"Edge importance for example {idx}")
+            plt.xlabel("Edge index")
+            plt.ylabel("Importance")
+            
+            # Save figure
+            plt.tight_layout()
+            plt.savefig(os.path.join(explanation_dir, f"explanation_{idx}.png"))
+            
+            # Log to wandb
+            if args.use_wandb and wandb_logger:
+                wandb_logger.log_artifact(
+                    os.path.join(explanation_dir, f"explanation_{idx}.png"),
+                    f"explanation_{idx}"
+                )
+                
+            plt.close()
+            
+        except Exception as e:
+            logger.error(f"Error visualizing explanation: {e}")
+    
+    # Calculate and log average layer importance
+    if layer_importance:
+        avg_layer_importance = np.mean(layer_importance, axis=0)
+        logger.info(f"Average feature importance across {num_examples} examples: {avg_layer_importance.tolist()}")
+        
+        # Visualize average importance
+        plt.figure(figsize=(10, 6))
+        plt.bar(range(len(avg_layer_importance)), avg_layer_importance)
+        plt.title("Average feature importance across examples")
+        plt.xlabel("Feature dimension")
+        plt.ylabel("Importance")
+        plt.tight_layout()
+        plt.savefig(os.path.join(explanation_dir, "average_importance.png"))
+        
+        # Log to wandb
+        if args.use_wandb and wandb_logger:
+            wandb_logger.log_artifact(
+                os.path.join(explanation_dir, "average_importance.png"),
+                "average_feature_importance"
+            )
+            
+            # Also log as a bar chart in wandb
+            if hasattr(wandb_logger, 'run') and wandb_logger.run:
+                import wandb
+                wandb_logger.run.log({
+                    "feature_importance": wandb.Image(
+                        os.path.join(explanation_dir, "average_importance.png")
+                    )
+                })
+        
+        plt.close()
+
 def evaluate_model(args):
     """
     Evaluation function for the graph regressor model.
@@ -462,6 +578,7 @@ def evaluate_model(args):
     set_seed(args.seed)
     
     # Initialize wandb logger for evaluation
+    wandb_logger = None
     if args.use_wandb:
         config = vars(args)
         config['phase'] = 'evaluation'
@@ -550,7 +667,13 @@ def evaluate_model(args):
             "test/error_prompt_length_corr": test_metrics['error_prompt_length_corr'],
         }
         wandb_logger.log_metrics(test_metrics_wandb)
+    
+    # Run GNNExplainer if requested
+    if args.explain:
+        explain_model_predictions(args, model, test_dataset, device, wandb_logger)
         
+    # Finish wandb logging
+    if args.use_wandb and wandb_logger:
         wandb_logger.finish()
     
     # Clean up memory
@@ -622,6 +745,8 @@ def main():
                         help="Whether to log model checkpoints to W&B")
     parser.add_argument("--wandb_group", type=str, default=None,
                         help="Weights & Biases group name for experiment comparison")
+    parser.add_argument("--explain", action="store_true",
+                    help="Run GNNExplainer on the trained model")
 
     args = parser.parse_args()
     

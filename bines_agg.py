@@ -123,12 +123,12 @@ def aggregate_layers(data, layer_names, aggregation='concat'):
         raise ValueError(f"Unsupported aggregation method: {aggregation}")
 
 # --- Data loader and split ---
-def load_and_split_dataset(data_path, layer_names, bin_edges, aggregation='concat', length_threshold=0, seed=42):
+def load_and_split_dataset(data_path, layer_names, bin_edges, aggregation='concat', length_threshold=0, seed=42, apply_threshold=False):
     data = torch.load(data_path)
     labels = data["labels"].float()
     
     # Filter out tokens with labels less than threshold
-    if length_threshold > 0:
+    if length_threshold > 0 and apply_threshold:
         valid_indices = torch.where(labels >= length_threshold)[0]
         logger.info(f"Filtering tokens with length < {length_threshold}: {len(labels)} → {len(valid_indices)} tokens")
         
@@ -175,7 +175,8 @@ def train_model(args):
         bin_edges, 
         aggregation=args.aggregation,
         length_threshold=args.length_threshold,
-        seed=args.seed
+        seed=args.seed,
+        apply_threshold=False
     )
     input_dim = train_set.embeddings.shape[1]
     logger.info(f"Input dimension: {input_dim}, using {args.aggregation} aggregation")
@@ -334,7 +335,8 @@ def evaluate_model(args):
         bin_edges, 
         aggregation=args.aggregation,
         length_threshold=args.length_threshold,
-        seed=args.seed
+        seed=args.seed,
+        apply_threshold=True
     )
     
     # Create test data loader
