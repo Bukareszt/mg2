@@ -225,22 +225,17 @@ def split_dataset(dataset, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, see
     return train_dataset, val_dataset, test_dataset
 
 
-def load_dataset(path, edge_mode="sequential", length_threshold=0):
+def load_dataset(path, edge_mode="sequential", length_threshold=None):
+    """
+    Load dataset without length filtering (moved to separate function)
+    """
     logger.info(f"🔄 Loading data from {path}...")
     data = torch.load(path)
 
     embeddings_by_layer = {k: v for k, v in data.items() if k.startswith("layer_")}
     labels = data["labels"]
     
-    # Filter out tokens with labels less than threshold
-    if length_threshold > 0:
-        valid_indices = torch.where(labels >= length_threshold)[0]
-        logger.info(f"Filtering tokens with length < {length_threshold}: {len(labels)} → {len(valid_indices)} tokens")
-        
-        # Filter embeddings and labels
-        labels = labels[valid_indices]
-        for layer in embeddings_by_layer:
-            embeddings_by_layer[layer] = embeddings_by_layer[layer][valid_indices]
+    # Length filtering was here but is now removed from initial loading
 
     logger.info(f"Using all {len(embeddings_by_layer)} layers: {list(embeddings_by_layer.keys())}")
     dataset = LayerwiseGraphDataset(embeddings_by_layer, labels, edge_mode=edge_mode)
@@ -249,7 +244,21 @@ def load_dataset(path, edge_mode="sequential", length_threshold=0):
     return dataset
 
 
-
+def filter_dataset_by_length(dataset, length_threshold):
+    """
+    Filter a dataset to only include tokens with lengths >= threshold
+    """
+    if length_threshold <= 0:
+        return dataset
+    
+    filtered_data = []
+    
+    for data in dataset:
+        if data.y.item() >= length_threshold:
+            filtered_data.append(data)
+    
+    logger.info(f"Filtered dataset by length threshold {length_threshold}: {len(dataset)} → {len(filtered_data)} tokens")
+    return filtered_data
 
 
 def train_model(args):
@@ -278,8 +287,8 @@ def train_model(args):
         log_model=args.log_model
     )
     
-    # Load dataset and create graph dataset
-    dataset = load_dataset(args.data_path, args.edge_mode, args.length_threshold)
+    # Load dataset without filtering
+    dataset = load_dataset(args.data_path, args.edge_mode)
     
     # Split dataset
     train_dataset, val_dataset, test_dataset = split_dataset(
@@ -289,6 +298,12 @@ def train_model(args):
         test_ratio=0.15,
         seed=args.seed
     )
+    
+    # Apply length threshold only to validation dataset
+    if args.length_threshold > 0:
+        original_val_size = len(val_dataset)
+        val_dataset = filter_dataset_by_length(val_dataset, args.length_threshold)
+        logger.info(f"Applied length threshold to validation set only: {original_val_size} → {len(val_dataset)} examples")
     
     # Create data loaders
     train_loader = DataLoader(
