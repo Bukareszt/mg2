@@ -232,9 +232,9 @@ stages:
         --use_amp
         --use_wandb
         --wandb_project embeddings-length-predictor
-        --do_train
         --do_eval
         --early_stopping_patience 5
+        --length_upper_threshold ${item.length_upper_threshold}
       deps:
         - bines.py
 
@@ -271,7 +271,6 @@ stages:
         --wandb_project embeddings-length-predictor
         --do_eval
         --early_stopping_patience 5
-        --length_upper_threshold ${item.length_upper_threshold}
       deps:
         - bines_agg.py
 
