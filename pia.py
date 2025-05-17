@@ -17,13 +17,12 @@ logger = logging.getLogger("PiA-Evaluator")
 def estimate_length_with_pia(model, tokenizer, prompt, device, max_new_tokens=5):
     pia_prompt = (
         f"{prompt.strip()}\n\n"
-        "Before responding to the above instruction, estimate the length of your response in tokens. "
-        "Print the estimated number in the first line. Then go to a new line and write the response."
+        "Estimate the number of tokens your response to the above instruction would contain. Only print the number. Do not write the response."
     )
 
     inputs = tokenizer(pia_prompt, return_tensors="pt", padding=True, truncation=True).to(device)
     with torch.no_grad():
-        output = model.generate(**inputs, max_new_tokens=max_new_tokens + 507, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 
     decoded = tokenizer.decode(output[0], skip_special_tokens=True)
     lines = decoded.strip().split("\n")
@@ -31,12 +30,8 @@ def estimate_length_with_pia(model, tokenizer, prompt, device, max_new_tokens=5)
     try:
         estimated = int(lines[0].strip().split()[0])
     except Exception:
-        return -1, 0
+        return -1, 0  # No actual token count anymore, but keep return format consistent
 
-    response = "\n".join(lines[1:])
-    response_tokens = tokenizer(response, return_tensors="pt", truncation=True).input_ids.shape[1]
-
-    return estimated, response_tokens
 
 def estimate_length_with_pia_batch(model, tokenizer, prompts, device, max_new_tokens=5, batch_size=8):
     """Process multiple prompts in batches for improved performance"""
@@ -67,16 +62,30 @@ def estimate_length_with_pia_batch(model, tokenizer, prompts, device, max_new_to
         for j, output in enumerate(outputs):
             decoded = tokenizer.decode(output, skip_special_tokens=True)
             lines = decoded.strip().split("\n")
-            print(lines)
-            try:
-                estimated = int(lines[0].strip().split()[0])
-            except Exception:
-                estimated = -1
-                
-            response = "\n".join(lines[1:])
+
+            # Debug print the output
+            print("==== Decoded Output ====")
+            for idx, line in enumerate(lines):
+                print(f"{idx}: {line}")
+
+            # Try to extract the first number from the first non-empty line
+            estimated = -1
+            for line in lines:
+                line = line.strip()
+                if line:  # skip empty lines
+                    tokens = line.split()
+                    for token in tokens:
+                        if token.isdigit():
+                            estimated = int(token)
+                            break
+                    break  # we only care about the first non-empty line
+
+            # Join the rest of the lines as the actual response
+            response = "\n".join(lines[1:]).strip()
             response_tokens = tokenizer(response, return_tensors="pt", truncation=True).input_ids.shape[1]
+
             print(f"Estimated: {estimated}, Actual: {response_tokens}")
-            
+
             all_estimated.append(estimated)
             all_actual.append(response_tokens)
     
