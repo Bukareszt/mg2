@@ -223,7 +223,7 @@ stages:
         --layer_name ${item.layer}
         --output_dir results/binned_predictor_${item.layer}_threshold${item.threshold}
         --hidden_dim ${item.hidden_dim}
-        --learning_rate 1e-4
+        --learning_rate 1e-3
         --batch_size 32
         --length_threshold ${item.threshold}
         --num_epochs 30
@@ -260,7 +260,7 @@ stages:
         --aggregation ${item.agg}
         --output_dir results/binned_predictor_${item.agg}_layers12-15_threshold${item.threshold}
         --hidden_dim 512
-        --learning_rate 1e-4
+        --learning_rate 1e-3
         --batch_size 32
         --length_threshold ${item.threshold}
         --num_epochs 30
@@ -299,3 +299,30 @@ stages:
          --wandb_project embeddings-length-predictor
        deps:
          - graph_regressor.py
+
+  # New stage for SHAP analysis of graph regressor models
+  shap_analysis:
+    foreach:
+      # Analyze different models with varying configurations
+      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 0 }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 80 }
+      - { edge_mode: 'fully_connected', hidden_dim: 256, threshold: 0 }
+      - { edge_mode: 'fully_connected', hidden_dim: 128, threshold: 0 }
+    do:
+      cmd: >
+        python shap.py
+        --model_path results/graph_regressor_${item.edge_mode}_threshold${item.threshold}/model.pt
+        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+        --edge_mode ${item.edge_mode}
+        --hidden_dim ${item.hidden_dim}
+        --length_threshold ${item.threshold}
+        --use_cuda
+        --use_wandb
+        --wandb_project embeddings-length-predictor
+        --wandb_name shap_analysis_${item.edge_mode}_hidden${item.hidden_dim}_threshold${item.threshold}
+      deps:
+        - shap.py
+        - results/graph_regressor_${item.edge_mode}_threshold${item.threshold}/model.pt
+      outs:
+        - results/graph_regressor_${item.edge_mode}_threshold${item.threshold}/shap_layer_importance.png:
+            cache: false

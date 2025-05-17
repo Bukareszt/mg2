@@ -134,7 +134,7 @@ def train_model(args):
     
     # Initialize wandb logger
     config = vars(args)
-    model_name = f"binned-length-predictor-{args.layer_name}"
+    model_name = f"binned-length-predictor-{args.layer_name}-thresh{args.length_threshold}"
     wandb_logger = Logger(
         config=config,
         model_name=model_name,
@@ -285,7 +285,8 @@ def evaluate_model(args):
         config = vars(args)
         config['phase'] = 'evaluation'
         
-        model_name = f"eval-binned-predictor-{args.layer_name}"
+        # Include length_threshold in evaluation model name
+        model_name = f"eval-binned-predictor-{args.layer_name}-thresh{args.length_threshold}"
         
         wandb_logger = Logger(
             config=config,
