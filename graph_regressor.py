@@ -246,20 +246,37 @@ def load_dataset(path, edge_mode="sequential", length_threshold=None):
     return dataset
 
 
-def filter_dataset_by_length(dataset, length_threshold):
+def filter_dataset_by_length(dataset, length_threshold, upper_threshold=None):
     """
-    Filter a dataset to only include tokens with lengths >= threshold
+    Filter a dataset to only include tokens with lengths in the specified range
+    
+    Args:
+        dataset: The dataset to filter
+        length_threshold: Minimum token length to include
+        upper_threshold: Maximum token length to include (if None, no upper limit)
     """
-    if length_threshold <= 0:
+    if length_threshold <= 0 and upper_threshold is None:
         return dataset
     
     filtered_data = []
     
     for data in dataset:
-        if data.y.item() >= length_threshold:
-            filtered_data.append(data)
+        y_value = data.y.item()
+        # Apply lower threshold
+        if y_value < length_threshold:
+            continue
+        
+        # Apply upper threshold if specified
+        if upper_threshold is not None and y_value > upper_threshold:
+            continue
+            
+        filtered_data.append(data)
     
-    logger.info(f"Filtered dataset by length threshold {length_threshold}: {len(dataset)} → {len(filtered_data)} tokens")
+    if upper_threshold is not None:
+        logger.info(f"Filtered dataset by length range [{length_threshold}, {upper_threshold}]: {len(dataset)} → {len(filtered_data)} tokens")
+    else:
+        logger.info(f"Filtered dataset by length threshold {length_threshold}: {len(dataset)} → {len(filtered_data)} tokens")
+    
     return filtered_data
 
 
@@ -606,10 +623,14 @@ def evaluate_model(args):
     )
     
     # Apply length threshold only to test dataset
-    if args.length_threshold > 0:
+    if args.length_threshold > 0 or args.length_upper_threshold is not None:
         original_test_size = len(test_dataset)
-        test_dataset = filter_dataset_by_length(test_dataset, args.length_threshold)
-        logger.info(f"Applied length threshold to test set only: {original_test_size} → {len(test_dataset)} examples")
+        test_dataset = filter_dataset_by_length(
+            test_dataset, 
+            args.length_threshold,
+            args.length_upper_threshold
+        )
+        logger.info(f"Applied length thresholds to test set only: {original_test_size} → {len(test_dataset)} examples")
     
     # Create test data loader
     test_loader = DataLoader(
@@ -694,6 +715,8 @@ def main():
                         help="Path to the pre-extracted embeddings dataset (.pt file)")
     parser.add_argument("--length_threshold", type=int, default=0,
                         help="Minimum token length to include in training (tokens with fewer remaining tokens are filtered out)")
+    parser.add_argument("--length_upper_threshold", type=int, default=None,
+                        help="Maximum token length to include in evaluation (creates a sliding window with length_threshold)")
     
     # Model arguments
     parser.add_argument("--hidden_dim", type=int, default=128,
