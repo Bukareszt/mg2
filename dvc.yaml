@@ -169,53 +169,53 @@ stages:
   ablation_binned_length_thresholds:
     foreach:
       # Testing thresholds with key layers
-      - { layer: 'layer_8', hidden_dim: 512, threshold: 0 }
-      - { layer: 'layer_8', hidden_dim: 512, threshold: 40 }
-      - { layer: 'layer_8', hidden_dim: 512, threshold: 80 }
-      - { layer: 'layer_8', hidden_dim: 512, threshold: 120 }
-      - { layer: 'layer_8', hidden_dim: 512, threshold: 240 }
+      - { layer: 'layer_8', hidden_dim: 512, threshold: 0, length_upper_threshold: 40 }
+      - { layer: 'layer_8', hidden_dim: 512, threshold: 40, length_upper_threshold: 80 }
+      - { layer: 'layer_8', hidden_dim: 512, threshold: 80, length_upper_threshold: 120 }
+      - { layer: 'layer_8', hidden_dim: 512, threshold: 120, length_upper_threshold: 240 }
+      - { layer: 'layer_8', hidden_dim: 512, threshold: 240, length_upper_threshold: 400 }
 
-      - { layer: 'layer_9', hidden_dim: 512, threshold: 0 } 
-      - { layer: 'layer_9', hidden_dim: 512, threshold: 40 }
-      - { layer: 'layer_9', hidden_dim: 512, threshold: 80 }
-      - { layer: 'layer_9', hidden_dim: 512, threshold: 120 }
-      - { layer: 'layer_9', hidden_dim: 512, threshold: 240 }
+      - { layer: 'layer_9', hidden_dim: 512, threshold: 0, length_upper_threshold: 40 } 
+      - { layer: 'layer_9', hidden_dim: 512, threshold: 40, length_upper_threshold: 80 }
+      - { layer: 'layer_9', hidden_dim: 512, threshold: 80, length_upper_threshold: 120 }
+      - { layer: 'layer_9', hidden_dim: 512, threshold: 120, length_upper_threshold: 240 }
+      - { layer: 'layer_9', hidden_dim: 512, threshold: 240, length_upper_threshold: 400 }
 
-      - { layer: 'layer_10', hidden_dim: 512, threshold: 0 }
-      - { layer: 'layer_10', hidden_dim: 512, threshold: 40 }
-      - { layer: 'layer_10', hidden_dim: 512, threshold: 80 }
-      - { layer: 'layer_10', hidden_dim: 512, threshold: 120 }
-      - { layer: 'layer_10', hidden_dim: 512, threshold: 240 }
+      - { layer: 'layer_10', hidden_dim: 512, threshold: 0, length_upper_threshold: 40 }
+      - { layer: 'layer_10', hidden_dim: 512, threshold: 40, length_upper_threshold: 80 }
+      - { layer: 'layer_10', hidden_dim: 512, threshold: 80, length_upper_threshold: 120 }
+      - { layer: 'layer_10', hidden_dim: 512, threshold: 120, length_upper_threshold: 240 }
+      - { layer: 'layer_10', hidden_dim: 512, threshold: 240, length_upper_threshold: 400 }
 
-      - { layer: 'layer_11', hidden_dim: 512, threshold: 0 }
-      - { layer: 'layer_11', hidden_dim: 512, threshold: 40 }
-      - { layer: 'layer_11', hidden_dim: 512, threshold: 80 }
-      - { layer: 'layer_11', hidden_dim: 512, threshold: 120 }
-      - { layer: 'layer_11', hidden_dim: 512, threshold: 240 }
+      - { layer: 'layer_11', hidden_dim: 512, threshold: 0, length_upper_threshold: 40 }
+      - { layer: 'layer_11', hidden_dim: 512, threshold: 40, length_upper_threshold: 80 }
+      - { layer: 'layer_11', hidden_dim: 512, threshold: 80, length_upper_threshold: 120 }
+      - { layer: 'layer_11', hidden_dim: 512, threshold: 120, length_upper_threshold: 240 }
+      - { layer: 'layer_11', hidden_dim: 512, threshold: 240, length_upper_threshold: 400 }
 
-      - { layer: 'layer_12', hidden_dim: 512, threshold: 0 }
-      - { layer: 'layer_12', hidden_dim: 512, threshold: 40 }
-      - { layer: 'layer_12', hidden_dim: 512, threshold: 80 }
-      - { layer: 'layer_12', hidden_dim: 512, threshold: 120 }
-      - { layer: 'layer_12', hidden_dim: 512, threshold: 240 }
+      - { layer: 'layer_12', hidden_dim: 512, threshold: 0, length_upper_threshold: 40 }
+      - { layer: 'layer_12', hidden_dim: 512, threshold: 40, length_upper_threshold: 80 }
+      - { layer: 'layer_12', hidden_dim: 512, threshold: 80, length_upper_threshold: 120 }
+      - { layer: 'layer_12', hidden_dim: 512, threshold: 120, length_upper_threshold: 240 }
+      - { layer: 'layer_12', hidden_dim: 512, threshold: 240, length_upper_threshold: 400 }
 
-      - { layer: 'layer_13', hidden_dim: 512, threshold: 0 }
-      - { layer: 'layer_13', hidden_dim: 512, threshold: 40 }
-      - { layer: 'layer_13', hidden_dim: 512, threshold: 80 }
-      - { layer: 'layer_13', hidden_dim: 512, threshold: 120 }
-      - { layer: 'layer_13', hidden_dim: 512, threshold: 240 }
+      - { layer: 'layer_13', hidden_dim: 512, threshold: 0, length_upper_threshold: 40 }
+      - { layer: 'layer_13', hidden_dim: 512, threshold: 40, length_upper_threshold: 80 }
+      - { layer: 'layer_13', hidden_dim: 512, threshold: 80, length_upper_threshold: 120 }
+      - { layer: 'layer_13', hidden_dim: 512, threshold: 120, length_upper_threshold: 240 }
+      - { layer: 'layer_13', hidden_dim: 512, threshold: 240, length_upper_threshold: 400 }
 
-      - { layer: 'layer_14', hidden_dim: 512, threshold: 0 }
-      - { layer: 'layer_14', hidden_dim: 512, threshold: 40 }
-      - { layer: 'layer_14', hidden_dim: 512, threshold: 80 }
-      - { layer: 'layer_14', hidden_dim: 512, threshold: 120 }
-      - { layer: 'layer_14', hidden_dim: 512, threshold: 240 }
+      - { layer: 'layer_14', hidden_dim: 512, threshold: 0, length_upper_threshold: 40 }
+      - { layer: 'layer_14', hidden_dim: 512, threshold: 40, length_upper_threshold: 80 }
+      - { layer: 'layer_14', hidden_dim: 512, threshold: 80, length_upper_threshold: 120 }
+      - { layer: 'layer_14', hidden_dim: 512, threshold: 120, length_upper_threshold: 240 }
+      - { layer: 'layer_14', hidden_dim: 512, threshold: 240, length_upper_threshold: 400 }
       
-      - { layer: 'layer_15', hidden_dim: 512, threshold: 0 }
-      - { layer: 'layer_15', hidden_dim: 512, threshold: 40 }
-      - { layer: 'layer_15', hidden_dim: 512, threshold: 80 }
-      - { layer: 'layer_15', hidden_dim: 512, threshold: 120 }
-      - { layer: 'layer_15', hidden_dim: 512, threshold: 240 }
+      - { layer: 'layer_15', hidden_dim: 512, threshold: 0, length_upper_threshold: 40 }
+      - { layer: 'layer_15', hidden_dim: 512, threshold: 40, length_upper_threshold: 80 }
+      - { layer: 'layer_15', hidden_dim: 512, threshold: 80, length_upper_threshold: 120 }
+      - { layer: 'layer_15', hidden_dim: 512, threshold: 120, length_upper_threshold: 240 }
+      - { layer: 'layer_15', hidden_dim: 512, threshold: 240, length_upper_threshold: 400 }
     do:
       cmd: >
         python bines.py

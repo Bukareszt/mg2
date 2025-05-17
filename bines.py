@@ -102,15 +102,25 @@ def compute_binned_metrics(logits, true_lengths, bin_edges):
 
 
 # --- Data loader and split ---
-def load_and_split_dataset(data_path, layer_name, bin_edges, length_threshold=0, seed=42, apply_threshold=False):
+def load_and_split_dataset(data_path, layer_name, bin_edges, length_threshold=0, upper_threshold=None, seed=42, apply_threshold=False):
     data = torch.load(data_path)
     embeddings = data[layer_name]
     labels = data["labels"].float()
     
-    # Filter out tokens with labels less than threshold
-    if length_threshold > 0 and apply_threshold:
-        valid_indices = torch.where(labels >= length_threshold)[0]
-        logger.info(f"Filtering tokens with length < {length_threshold}: {len(labels)} → {len(valid_indices)} tokens")
+    # Filter out tokens with labels outside of threshold range
+    if apply_threshold and (length_threshold > 0 or upper_threshold is not None):
+        # Create mask for lower threshold
+        lower_mask = labels >= length_threshold
+        
+        # Add upper threshold mask if specified
+        if upper_threshold is not None:
+            upper_mask = labels <= upper_threshold
+            valid_mask = torch.logical_and(lower_mask, upper_mask)
+            valid_indices = torch.where(valid_mask)[0]
+            logger.info(f"Filtering tokens with length outside range [{length_threshold}, {upper_threshold}]: {len(labels)} → {len(valid_indices)} tokens")
+        else:
+            valid_indices = torch.where(lower_mask)[0]
+            logger.info(f"Filtering tokens with length < {length_threshold}: {len(labels)} → {len(valid_indices)} tokens")
         
         # Filter embeddings and labels
         labels = labels[valid_indices]
@@ -286,8 +296,12 @@ def evaluate_model(args):
         config = vars(args)
         config['phase'] = 'evaluation'
         
-        # Include length_threshold in evaluation model name
-        model_name = f"eval-binned-predictor-{args.layer_name}-thresh{args.length_threshold}"
+        # Include length range in evaluation model name
+        range_str = f"thresh{args.length_threshold}"
+        if args.length_upper_threshold is not None:
+            range_str = f"range{args.length_threshold}-{args.length_upper_threshold}"
+            
+        model_name = f"eval-binned-predictor-{args.layer_name}-{range_str}"
         
         wandb_logger = Logger(
             config=config,
@@ -303,7 +317,8 @@ def evaluate_model(args):
         args.data_path, 
         args.layer_name, 
         bin_edges, 
-        length_threshold=args.length_threshold, 
+        length_threshold=args.length_threshold,
+        upper_threshold=args.length_upper_threshold,
         seed=args.seed,
         apply_threshold=True  # Apply threshold during evaluation
     )
@@ -409,6 +424,8 @@ if __name__ == '__main__':
     parser.add_argument('--use_amp', action='store_true')
     parser.add_argument('--length_threshold', type=int, default=0,
                         help='Minimum token length to include in training (tokens with fewer remaining tokens are filtered out)')
+    parser.add_argument('--length_upper_threshold', type=int, default=None,
+                        help='Maximum token length to include in evaluation (creates a sliding window with length_threshold)')
     parser.add_argument('--early_stopping_patience', type=int, default=5,
                         help='Number of epochs with no improvement after which training will be stopped')
     
