@@ -299,11 +299,6 @@ def train_model(args):
         seed=args.seed
     )
     
-    # Apply length threshold only to validation dataset
-    if args.length_threshold > 0:
-        original_val_size = len(val_dataset)
-        val_dataset = filter_dataset_by_length(val_dataset, args.length_threshold)
-        logger.info(f"Applied length threshold to validation set only: {original_val_size} → {len(val_dataset)} examples")
     
     # Create data loaders
     train_loader = DataLoader(
@@ -481,8 +476,8 @@ def evaluate_model(args):
             log_model=False
         )
     
-    # Load dataset and create graph dataset
-    dataset = load_dataset(args.data_path, args.edge_mode, args.length_threshold)
+    # Load dataset without filtering
+    dataset = load_dataset(args.data_path, args.edge_mode)
     
     # Split dataset
     _, _, test_dataset = split_dataset(
@@ -492,6 +487,12 @@ def evaluate_model(args):
         test_ratio=0.15,
         seed=args.seed
     )
+    
+    # Apply length threshold only to test dataset
+    if args.length_threshold > 0:
+        original_test_size = len(test_dataset)
+        test_dataset = filter_dataset_by_length(test_dataset, args.length_threshold)
+        logger.info(f"Applied length threshold to test set only: {original_test_size} → {len(test_dataset)} examples")
     
     # Create test data loader
     test_loader = DataLoader(
