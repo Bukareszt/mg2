@@ -48,7 +48,7 @@ def estimate_length_with_pia_batch(model, tokenizer, prompts, device, max_new_to
         for prompt in batch_prompts:
             pia_prompt = (
                 f"{prompt.strip()}\n\n"
-         "Estimate the number of tokens your response to the above instruction would contain. Only print the number. Do not write the response."
+         "Estimate the number of words in response to the above instruction would contain. Only print the number. Do not write the response."
             )
             pia_prompts.append(pia_prompt)
         
