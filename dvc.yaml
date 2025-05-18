@@ -163,6 +163,7 @@ stages:
         --use_wandb
         --wandb_project embeddings-length-predictor
         --length_upper_threshold ${item.length_upper_threshold}
+        --do_train
       deps:
         - graph_regressor.py
 
