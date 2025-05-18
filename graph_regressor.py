@@ -319,6 +319,34 @@ def train_model(args):
         seed=args.seed
     )
     
+    # Apply length thresholds to all datasets
+    if args.length_threshold > 0 or args.length_upper_threshold is not None:
+        original_train_size = len(train_dataset)
+        original_val_size = len(val_dataset)
+        original_test_size = len(test_dataset)
+        
+        train_dataset = filter_dataset_by_length(
+            train_dataset, 
+            args.length_threshold,
+            args.length_upper_threshold
+        )
+        
+        val_dataset = filter_dataset_by_length(
+            val_dataset, 
+            args.length_threshold,
+            args.length_upper_threshold
+        )
+        
+        test_dataset = filter_dataset_by_length(
+            test_dataset, 
+            args.length_threshold,
+            args.length_upper_threshold
+        )
+        
+        logger.info(f"Applied length thresholds to all datasets:")
+        logger.info(f"  Training: {original_train_size} → {len(train_dataset)} examples")
+        logger.info(f"  Validation: {original_val_size} → {len(val_dataset)} examples")
+        logger.info(f"  Test: {original_test_size} → {len(test_dataset)} examples")
     
     # Create data loaders
     train_loader = DataLoader(
@@ -556,7 +584,7 @@ def evaluate_model(args):
         seed=args.seed
     )
     
-    # Apply length threshold only to test dataset
+    # Apply length threshold to test dataset
     if args.length_threshold > 0 or args.length_upper_threshold is not None:
         original_test_size = len(test_dataset)
         test_dataset = filter_dataset_by_length(
@@ -564,7 +592,7 @@ def evaluate_model(args):
             args.length_threshold,
             args.length_upper_threshold
         )
-        logger.info(f"Applied length thresholds to test set only: {original_test_size} → {len(test_dataset)} examples")
+        logger.info(f"Applied length thresholds to test set: {original_test_size} → {len(test_dataset)} examples")
     
     # Create test data loader
     test_loader = DataLoader(
