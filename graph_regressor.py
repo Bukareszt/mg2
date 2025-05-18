@@ -396,7 +396,7 @@ def train_model(args):
             
             # Log predictions CSV to wandb
             if args.use_wandb:
-                wandb_logger.log_artifact(preds_csv_path, f"val_predictions_epoch_{epoch+1}")
+                wandb_logger.log_artifact(preds_csv_path, f"val_predictions_epoch_{epoch+1}", "predictions")
         
         # Update learning rate
         scheduler.step(val_metrics["loss"])
@@ -417,21 +417,6 @@ def train_model(args):
         logger.info(f"  Val Norm. MAE: {val_metrics['normalized_mae']:.4f}")
         logger.info(f"  Val Error-Length Corr: {val_metrics['error_prompt_length_corr']:.4f}")
 
-        # Save validation results to CSV
-        with open(csv_path, 'a', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writerow({
-                'epoch': epoch + 1,
-                'loss': f"{val_metrics['loss']:.6f}",
-                'mae': f"{val_metrics['mae']:.6f}",
-                'mse': f"{val_metrics['mse']:.6f}",
-                'rmse': f"{val_metrics['rmse']:.6f}",
-                'r2': f"{val_metrics['r2']:.6f}",
-                'normalized_mae': f"{val_metrics['normalized_mae']:.6f}",
-                'error_prompt_length_corr': f"{val_metrics['error_prompt_length_corr']:.6f}",
-                'lr': f"{current_lr:.8f}"
-            })
-
         # Log metrics to wandb
         if args.use_wandb:
             wandb_metrics = {
@@ -451,8 +436,33 @@ def train_model(args):
             }
             wandb_logger.log_metrics(wandb_metrics, step=epoch)
             
+            # Create validation results CSV path
+            csv_path = os.path.join(args.output_dir, "validation_results.csv")
+            
+            # Save validation metrics to CSV for this epoch
+            with open(csv_path, 'a', newline='') as csvfile:
+                fieldnames = ['epoch', 'loss', 'mae', 'mse', 'rmse', 'r2', 'normalized_mae', 
+                             'error_prompt_length_corr', 'lr']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                
+                # Write header if the file is new
+                if not os.path.isfile(csv_path) or os.path.getsize(csv_path) == 0:
+                    writer.writeheader()
+                    
+                writer.writerow({
+                    'epoch': epoch + 1,
+                    'loss': f"{val_metrics['loss']:.6f}",
+                    'mae': f"{val_metrics['mae']:.6f}",
+                    'mse': f"{val_metrics['mse']:.6f}",
+                    'rmse': f"{val_metrics['rmse']:.6f}",
+                    'r2': f"{val_metrics['r2']:.6f}",
+                    'normalized_mae': f"{val_metrics['normalized_mae']:.6f}",
+                    'error_prompt_length_corr': f"{val_metrics['error_prompt_length_corr']:.6f}",
+                    'lr': f"{current_lr:.8f}"
+                })
+            
             # Log CSV as an artifact to wandb
-            wandb_logger.log_artifact(csv_path, f"validation_results_epoch_{epoch+1}")
+            wandb_logger.log_artifact(csv_path, f"validation_results_epoch_{epoch+1}", "metrics")
         
         # Check for improvement and save model
         if val_metrics["loss"] + args.min_loss_improvement < best_val_loss:
@@ -633,7 +643,7 @@ def evaluate_model(args):
     
     # Log predictions CSV to wandb
     if args.use_wandb:
-        wandb_logger.log_artifact(preds_csv_path, "test_predictions")
+        wandb_logger.log_artifact(preds_csv_path, "test_predictions", "predictions")
     
     # Finish wandb logging
     if args.use_wandb and wandb_logger:
