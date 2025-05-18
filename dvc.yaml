@@ -286,6 +286,7 @@ stages:
          --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
          --output_dir results/graph_regressor_${item.edge_mode}
          --do_eval
+         --do_train
          --batch_size 16
          --learning_rate 1e-3
          --num_epochs 30
