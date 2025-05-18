@@ -295,6 +295,7 @@ stages:
          --seed 42
          --use_amp
          --num_workers 4
+         --do_train
          --edge_mode ${item.edge_mode}
          --use_wandb
          --wandb_project embeddings-length-predictor
