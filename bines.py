@@ -1,6 +1,7 @@
 # Binned classification version of token length prediction
 # Implements TRAIL-style classification into bins and expected length regression
 
+from matplotlib import pyplot as plt
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -16,6 +17,7 @@ from tqdm import tqdm
 from sklearn.metrics import mean_absolute_error, r2_score
 import argparse
 from logger import Logger
+import pandas as pd
 
 # --- Logging setup ---
 logging.basicConfig(
@@ -288,6 +290,67 @@ def train_model(args):
     # Finish wandb logging
     if args.use_wandb:
         wandb_logger.finish()
+        
+def plot_mae_vs_distance_from_end(preds, labels, output_dir=None, title="MAE vs Distance from End", window=3, min_count=5):
+    """
+    Plots MAE as a function of the distance from the end of the generation (i.e., true token length),
+    including standard deviation and smoothing.
+    
+    Args:
+        preds: List or array of predicted token lengths
+        labels: List or array of true token lengths
+        output_dir: If provided, saves the plot as a PNG in this directory
+        title: Plot title
+        window: Size of smoothing window (rolling average)
+        min_count: Minimum number of samples per bin to include in the plot
+    """
+    preds = np.array(preds)
+    labels = np.array(labels)
+
+    # Create DataFrame and compute absolute error
+    df = pd.DataFrame({'true_length': labels, 'pred': preds})
+    df['error'] = np.abs(df['true_length'] - df['pred'])
+
+    # Group by true length
+    grouped = df.groupby('true_length').agg(
+        mae=('error', 'mean'),
+        std=('error', 'std'),
+        count=('error', 'count')
+    ).reset_index()
+
+    # Filter out low-count bins
+    grouped = grouped[grouped['count'] >= min_count]
+
+    # Apply smoothing using rolling window
+    grouped['mae_smooth'] = grouped['mae'].rolling(window=window, center=True).mean()
+    grouped['std_smooth'] = grouped['std'].rolling(window=window, center=True).mean()
+
+    # Plot with shaded standard deviation
+    plt.figure(figsize=(10, 6))
+    plt.plot(grouped['true_length'], grouped['mae_smooth'], label='MAE (smoothed)', color='blue')
+    plt.fill_between(
+        grouped['true_length'],
+        grouped['mae_smooth'] - grouped['std_smooth'],
+        grouped['mae_smooth'] + grouped['std_smooth'],
+        color='blue',
+        alpha=0.2,
+        label='±1 STD'
+    )
+    
+    plt.xlabel("Distance from End (True Token Length)")
+    plt.ylabel("Mean Absolute Error (MAE)")
+    plt.title(title)
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    
+    if output_dir:
+        plot_path = os.path.join(output_dir, "mae_vs_distance_from_end.png")
+        plt.savefig(plot_path)
+        logger.info(f"Saved MAE vs Distance plot to {plot_path}")
+    else:
+        plt.show()
+
 
 # --- Evaluation function for the model ---
 def evaluate_model(args):
@@ -394,7 +457,22 @@ def evaluate_model(args):
     logger.info(f"  Error-Prompt Length Correlation: {test_corr:.4f}")
     logger.info(f"  R² Score: {test_r2:.4f}")
     
-    # Log test metrics to wandb
+    # Generate predictions for plotting
+    probs = torch.softmax(all_logits, dim=-1).detach().cpu().numpy()
+    midpoints = (bin_edges[:-1] + bin_edges[1:]) / 2
+    predictions = (probs * midpoints).sum(axis=1)
+    true_lengths = all_true.detach().cpu().numpy()
+    
+    # Create MAE vs distance plot
+    plot_title = f"MAE vs Distance from End ({args.layer_name}, threshold={args.length_threshold})"
+    plot_mae_vs_distance_from_end(
+        predictions, 
+        true_lengths, 
+        output_dir=args.output_dir,
+        title=plot_title
+    )
+    
+    # Log test metrics and plot to wandb
     if args.use_wandb:
         test_metrics_wandb = {
             "test/loss": test_loss,
@@ -404,6 +482,11 @@ def evaluate_model(args):
             "test/r2": test_r2
         }
         wandb_logger.log_metrics(test_metrics_wandb)
+        
+        # Log the plot to wandb
+        plot_path = os.path.join(args.output_dir, "mae_vs_distance_from_end.png")
+        if os.path.exists(plot_path):
+            wandb_logger.log_image(plot_path, "mae_vs_distance_plot")
         
         wandb_logger.finish()
     
