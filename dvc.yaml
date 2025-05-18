@@ -161,6 +161,7 @@ stages:
         --num_workers 4
         --edge_mode ${item.edge_mode}
         --use_wandb
+        --do_train
         --wandb_project embeddings-length-predictor
         --length_upper_threshold ${item.length_upper_threshold}
       deps:
