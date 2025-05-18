@@ -15,6 +15,7 @@ import os
 import logging
 import gc
 import argparse
+import csv  # Add CSV module import
 from tqdm import tqdm
 from logger import Logger  # Import the Logger class
 import matplotlib.pyplot as plt
@@ -166,7 +167,8 @@ def evaluate(model, loader, loss_fn, device, use_amp=False):
     metrics = compute_metrics(preds, labels_list)
     metrics["loss"] = total_loss / len(loader)
     
-    return metrics
+    # Return metrics and the raw predictions/labels for detailed analysis
+    return metrics, preds, labels_list
 
 
 def compute_metrics(preds, labels):
@@ -369,16 +371,36 @@ def train_model(args):
         )
         
         # Validate
-        val_metrics = evaluate(
+        val_results = evaluate(
             model,
             val_loader,
             loss_fn,
             device,
             use_amp=args.use_amp
         )
+        val_metrics, val_preds, val_labels = val_results
+        
+        # Save validation predictions to CSV
+        if epoch == 0 or val_metrics["loss"] + args.min_loss_improvement < best_val_loss:
+            # Save token predictions to CSV
+            preds_csv_path = os.path.join(args.output_dir, f"val_predictions_epoch_{epoch+1}.csv")
+            with open(preds_csv_path, 'w', newline='') as csvfile:
+                fieldnames = ['true_length', 'predicted_length']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                for true_len, pred_len in zip(val_labels, val_preds):
+                    writer.writerow({
+                        'true_length': f"{true_len:.1f}",
+                        'predicted_length': f"{pred_len:.1f}"
+                    })
+            
+            # Log predictions CSV to wandb
+            if args.use_wandb:
+                wandb_logger.log_artifact(preds_csv_path, f"val_predictions_epoch_{epoch+1}")
         
         # Update learning rate
         scheduler.step(val_metrics["loss"])
+        current_lr = optimizer.param_groups[0]['lr']
         
         # Log metrics
         logger.info(f"Epoch {epoch+1}/{args.num_epochs}:")
@@ -395,6 +417,21 @@ def train_model(args):
         logger.info(f"  Val Norm. MAE: {val_metrics['normalized_mae']:.4f}")
         logger.info(f"  Val Error-Length Corr: {val_metrics['error_prompt_length_corr']:.4f}")
 
+        # Save validation results to CSV
+        with open(csv_path, 'a', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writerow({
+                'epoch': epoch + 1,
+                'loss': f"{val_metrics['loss']:.6f}",
+                'mae': f"{val_metrics['mae']:.6f}",
+                'mse': f"{val_metrics['mse']:.6f}",
+                'rmse': f"{val_metrics['rmse']:.6f}",
+                'r2': f"{val_metrics['r2']:.6f}",
+                'normalized_mae': f"{val_metrics['normalized_mae']:.6f}",
+                'error_prompt_length_corr': f"{val_metrics['error_prompt_length_corr']:.6f}",
+                'lr': f"{current_lr:.8f}"
+            })
+
         # Log metrics to wandb
         if args.use_wandb:
             wandb_metrics = {
@@ -408,11 +445,14 @@ def train_model(args):
                 "val/mae": val_metrics['mae'],
                 "val/rmse": val_metrics['rmse'],
                 "val/r2": val_metrics['r2'],
-                "lr": optimizer.param_groups[0]['lr'],
+                "lr": current_lr,
                 "val/normalized_mae": val_metrics['normalized_mae'],
                 "val/error_prompt_length_corr": val_metrics['error_prompt_length_corr'],
             }
             wandb_logger.log_metrics(wandb_metrics, step=epoch)
+            
+            # Log CSV as an artifact to wandb
+            wandb_logger.log_artifact(csv_path, f"validation_results_epoch_{epoch+1}")
         
         # Check for improvement and save model
         if val_metrics["loss"] + args.min_loss_improvement < best_val_loss:
@@ -468,118 +508,6 @@ def train_model(args):
     free_gpu_memory()
     
     return best_val_loss
-    """
-    Run GNNExplainer on the trained model to explain predictions.
-    """
-    logger.info("Running GNNExplainer to interpret model predictions...")
-    model.eval()
-    
-    # Create output directory for explanations
-    explanation_dir = os.path.join(args.output_dir, "explanations")
-    os.makedirs(explanation_dir, exist_ok=True)
-    
-    # Initialize explainer
-    explainer = GNNExplainer(
-        model=model,
-        epochs=100,
-        return_type='regression'
-    )
-    
-    # Select a subset of examples to explain
-    num_examples = min(10, len(dataset))
-    indices = list(range(len(dataset)))
-    random.shuffle(indices)
-    selected_indices = indices[:num_examples]
-    
-    # Track average feature importance across examples
-    layer_importance = []
-    
-    for i, idx in enumerate(selected_indices):
-        logger.info(f"Explaining example {i+1}/{num_examples} (dataset index {idx})...")
-        
-        # Get data sample
-        data = dataset[idx].to(device)
-        
-        # Run explainer
-        node_feat_mask, edge_mask = explainer.explain_graph(
-            x=data.x, 
-            edge_index=data.edge_index,
-            batch=None  # Single graph, no batch
-        )
-        
-        # Store node feature importance for later analysis
-        layer_importance.append(node_feat_mask.detach().cpu().numpy())
-        
-        # Log feature and edge importance
-        logger.info(f"Example {idx} (true token length: {data.y.item():.1f}):")
-        logger.info(f"  Node feature importance: {node_feat_mask.tolist()}")
-        logger.info(f"  Edge importance: {edge_mask.tolist()}")
-        
-        # Visualize and save explanation
-        try:
-            plt.figure(figsize=(12, 8))
-            
-            # Plot node feature importance
-            plt.subplot(2, 1, 1)
-            plt.bar(range(len(node_feat_mask)), node_feat_mask.detach().cpu().numpy())
-            plt.title(f"Layer feature importance for example {idx}")
-            plt.xlabel("Feature dimension")
-            plt.ylabel("Importance")
-            
-            # Plot edge importance
-            plt.subplot(2, 1, 2)
-            plt.bar(range(len(edge_mask)), edge_mask.detach().cpu().numpy())
-            plt.title(f"Edge importance for example {idx}")
-            plt.xlabel("Edge index")
-            plt.ylabel("Importance")
-            
-            # Save figure
-            plt.tight_layout()
-            plt.savefig(os.path.join(explanation_dir, f"explanation_{idx}.png"))
-            
-            # Log to wandb
-            if args.use_wandb and wandb_logger:
-                wandb_logger.log_artifact(
-                    os.path.join(explanation_dir, f"explanation_{idx}.png"),
-                    f"explanation_{idx}"
-                )
-                
-            plt.close()
-            
-        except Exception as e:
-            logger.error(f"Error visualizing explanation: {e}")
-    
-    # Calculate and log average layer importance
-    if layer_importance:
-        avg_layer_importance = np.mean(layer_importance, axis=0)
-        logger.info(f"Average feature importance across {num_examples} examples: {avg_layer_importance.tolist()}")
-        
-        # Visualize average importance
-        plt.figure(figsize=(10, 6))
-        plt.bar(range(len(avg_layer_importance)), avg_layer_importance)
-        plt.title("Average feature importance across examples")
-        plt.xlabel("Feature dimension")
-        plt.ylabel("Importance")
-        plt.tight_layout()
-        plt.savefig(os.path.join(explanation_dir, "average_importance.png"))
-        
-        # Log to wandb
-        if args.use_wandb and wandb_logger:
-            wandb_logger.log_artifact(
-                os.path.join(explanation_dir, "average_importance.png"),
-                "average_feature_importance"
-            )
-            
-            # Also log as a bar chart in wandb
-            if hasattr(wandb_logger, 'run') and wandb_logger.run:
-                import wandb
-                wandb_logger.run.log({
-                    "feature_importance": wandb.Image(
-                        os.path.join(explanation_dir, "average_importance.png")
-                    )
-                })
-        
-        plt.close()
 
 def evaluate_model(args):
     """
@@ -661,7 +589,8 @@ def evaluate_model(args):
     
     # Evaluate
     loss_fn = nn.L1Loss()
-    test_metrics = evaluate(model, test_loader, loss_fn, device, use_amp=args.use_amp)
+    test_results = evaluate(model, test_loader, loss_fn, device, use_amp=args.use_amp)
+    test_metrics, test_preds, test_labels = test_results
     
     # Log metrics
     logger.info("Test Metrics:")
@@ -672,20 +601,40 @@ def evaluate_model(args):
     logger.info(f"  Norm. MAE: {test_metrics['normalized_mae']:.4f}")
     logger.info(f"  Error-Length Corr: {test_metrics['error_prompt_length_corr']:.4f}")
 
-    # Log test metrics to wandb
-    if args.use_wandb:
-        test_metrics_wandb = {
-            "test/loss": test_metrics['loss'],
-            "test/mae": test_metrics['mae'],
-            "test/mse": test_metrics['mse'],
-            "test/rmse": test_metrics['rmse'],
-            "test/r2": test_metrics['r2'],
-            "test/normalized_mae": test_metrics['normalized_mae'],
-            "test/error_prompt_length_corr": test_metrics['error_prompt_length_corr'],
-        }
-        wandb_logger.log_metrics(test_metrics_wandb)
+    # Save test results to CSV
+    csv_path = os.path.join(args.output_dir, "test_results.csv")
+    with open(csv_path, 'w', newline='') as csvfile:
+        fieldnames = ['loss', 'mae', 'mse', 'rmse', 'r2', 'normalized_mae', 'error_prompt_length_corr']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow({
+            'loss': f"{test_metrics['loss']:.6f}",
+            'mae': f"{test_metrics['mae']:.6f}",
+            'mse': f"{test_metrics['mse']:.6f}",
+            'rmse': f"{test_metrics['rmse']:.6f}",
+            'r2': f"{test_metrics['r2']:.6f}",
+            'normalized_mae': f"{test_metrics['normalized_mae']:.6f}",
+            'error_prompt_length_corr': f"{test_metrics['error_prompt_length_corr']:.6f}"
+        })
 
-        
+    # Save token predictions to CSV
+    preds_csv_path = os.path.join(args.output_dir, "test_predictions.csv")
+    with open(preds_csv_path, 'w', newline='') as csvfile:
+        fieldnames = ['true_length', 'predicted_length', 'error']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for true_len, pred_len in zip(test_labels, test_preds):
+            error = abs(true_len - pred_len)
+            writer.writerow({
+                'true_length': f"{true_len:.1f}",
+                'predicted_length': f"{pred_len:.1f}",
+                'error': f"{error:.1f}"
+            })
+    
+    # Log predictions CSV to wandb
+    if args.use_wandb:
+        wandb_logger.log_artifact(preds_csv_path, "test_predictions")
+    
     # Finish wandb logging
     if args.use_wandb and wandb_logger:
         wandb_logger.finish()
