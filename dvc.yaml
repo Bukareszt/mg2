@@ -279,8 +279,6 @@ stages:
 
   train_graph_regressors:
      foreach:
-       - { edge_mode: 'fully_connected', hidden_dim: 128 }
-       - { edge_mode: 'fully_connected', hidden_dim: 256 }
        - { edge_mode: 'fully_connected', hidden_dim: 512 }
      do:
        cmd: >
