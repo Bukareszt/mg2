@@ -139,12 +139,13 @@ stages:
   # Length threshold ablation studies
   ablation_graph_length_thresholds:
     foreach:
-      # Testing multiple thresholds with fully connected graph
-      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 0, length_upper_threshold: 40 }
-      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 40, length_upper_threshold: 80 }
-      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 80, length_upper_threshold: 120 }
-      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 120, length_upper_threshold: 240 }
-      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 240, length_upper_threshold: 400 }
+      # # Testing multiple thresholds with fully connected graph
+      # - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 0, length_upper_threshold: 40 }
+      # - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 40, length_upper_threshold: 80 }
+      # - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 80, length_upper_threshold: 120 }
+      # - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 120, length_upper_threshold: 240 }
+      # - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 240, length_upper_threshold: 400 }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 400, length_upper_threshold: 600 }
     do:
       cmd: >
         python graph_regressor.py
