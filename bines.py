@@ -13,7 +13,7 @@ import os
 import logging
 import gc
 from tqdm import tqdm
-from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_error, r2_score
 import argparse
 from logger import Logger
 
@@ -97,8 +97,14 @@ def compute_binned_metrics(logits, true_lengths, bin_edges):
         corr, _ = pearsonr(errors, true_lengths)
     except Exception:
         corr = float('nan')
+        
+    # Calculate R² score
+    try:
+        r2 = r2_score(true_lengths, expected)
+    except Exception:
+        r2 = float('nan')
 
-    return mae, norm_mae, corr
+    return mae, norm_mae, corr, r2
 
 
 # --- Data loader and split ---
@@ -196,8 +202,8 @@ def train_model(args):
             total_loss += loss.item()
 
         train_loss = total_loss/len(train_loader)
-        train_mae, train_norm_mae, train_corr = compute_binned_metrics(logits, y_bin, bin_edges)
-        logger.info(f"Train MAE: {train_mae:.4f}, Train Normalized MAE: {train_norm_mae:.4f}, Train Correlation: {train_corr:.4f}")
+        train_mae, train_norm_mae, train_corr, train_r2 = compute_binned_metrics(logits, batch['labels'].to(device), bin_edges)
+        logger.info(f"Train MAE: {train_mae:.4f}, Train Normalized MAE: {train_norm_mae:.4f}, Train Correlation: {train_corr:.4f}, Train R²: {train_r2:.4f}")
 
         # Validation
         model.eval()
@@ -220,11 +226,11 @@ def train_model(args):
                 
         all_logits = torch.cat(all_logits)
         all_true = torch.cat(all_true)
-        val_mae, val_norm_mae, val_corr = compute_binned_metrics(all_logits, all_true, bin_edges)
+        val_mae, val_norm_mae, val_corr, val_r2 = compute_binned_metrics(all_logits, all_true, bin_edges)
         val_loss = val_loss / len(val_loader)
         
         # Log metrics
-        logger.info(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val MAE: {val_mae:.4f}")
+        logger.info(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val MAE: {val_mae:.4f} | Val R²: {val_r2:.4f}")
         
         # Log metrics to wandb
         if args.use_wandb:
@@ -234,10 +240,12 @@ def train_model(args):
                 "val/mae": val_mae,
                 "val/normalized_mae": val_norm_mae,
                 "val/error_prompt_length_corr": val_corr,
+                "val/r2": val_r2,
                 "lr": optimizer.param_groups[0]['lr'],
                 "train/mae": train_mae,
                 "train/normalized_mae": train_norm_mae,
-                "train/error_prompt_length_corr": train_corr
+                "train/error_prompt_length_corr": train_corr,
+                "train/r2": train_r2
             }
             wandb_logger.log_metrics(wandb_metrics, step=epoch)
 
@@ -374,7 +382,7 @@ def evaluate_model(args):
     
     all_logits = torch.cat(all_logits)
     all_true = torch.cat(all_true)
-    test_mae, test_norm_mae, test_corr = compute_binned_metrics(all_logits, all_true, bin_edges)
+    test_mae, test_norm_mae, test_corr, test_r2 = compute_binned_metrics(all_logits, all_true, bin_edges)
 
     test_loss = test_loss / len(test_loader)
     
@@ -384,6 +392,7 @@ def evaluate_model(args):
     logger.info(f"  MAE: {test_mae:.4f}")
     logger.info(f"  Normalized MAE: {test_norm_mae:.4f}")
     logger.info(f"  Error-Prompt Length Correlation: {test_corr:.4f}")
+    logger.info(f"  R² Score: {test_r2:.4f}")
     
     # Log test metrics to wandb
     if args.use_wandb:
@@ -391,7 +400,8 @@ def evaluate_model(args):
             "test/loss": test_loss,
             "test/mae": test_mae,
             "test/normalized_mae": test_norm_mae,
-            "test/error_prompt_length_corr": test_corr
+            "test/error_prompt_length_corr": test_corr,
+            "test/r2": test_r2
         }
         wandb_logger.log_metrics(test_metrics_wandb)
         
