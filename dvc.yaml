@@ -298,7 +298,6 @@ stages:
          --edge_mode ${item.edge_mode}
          --use_wandb
          --wandb_project embeddings-length-predictor
-         --explain
        deps:
          - graph_regressor.py
 
