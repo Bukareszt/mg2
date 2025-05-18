@@ -1,3 +1,4 @@
+import pandas as pd
 import torch
 from scipy.stats import pearsonr
 from torch import nn
@@ -547,6 +548,47 @@ def train_model(args):
     
     return best_val_loss
 
+def plot_mae_vs_distance_from_end(preds, labels, output_dir=None, title="MAE vs Distance from End"):
+    """
+    Plots MAE as a function of the distance from the end of the generation (i.e., true token length).
+    
+    Args:
+        preds: List or array of predicted token lengths
+        labels: List or array of true token lengths
+        output_dir: If provided, saves the plot as a PNG in this directory
+        title: Plot title
+    """
+    # Convert to numpy
+    preds = np.array(preds)
+    labels = np.array(labels)
+
+    # Create a DataFrame for easy binning
+    df = pd.DataFrame({'true_length': labels, 'pred': preds})
+    df['error'] = np.abs(df['true_length'] - df['pred'])
+
+    # Bin by distance from end (i.e. true_length)
+    grouped = df.groupby('true_length').agg(mae=('error', 'mean'), count=('error', 'count')).reset_index()
+
+    # Filter to only bins with enough data
+    grouped = grouped[grouped['count'] >= 5]  # optional threshold for smoothing
+
+    # Plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(grouped['true_length'], grouped['mae'], marker='o')
+    plt.xlabel("Distance from End (in tokens)")
+    plt.ylabel("MAE")
+    plt.title(title)
+    plt.grid(True)
+    plt.tight_layout()
+    
+    if output_dir:
+        plot_path = os.path.join(output_dir, "mae_vs_distance_from_end.png")
+        plt.savefig(plot_path)
+        logger.info(f"Saved MAE vs Distance plot to {plot_path}")
+    else:
+        plt.show()
+
+
 def evaluate_model(args):
     """
     Evaluation function for the graph regressor model.
@@ -655,6 +697,14 @@ def evaluate_model(args):
             'error_prompt_length_corr': f"{test_metrics['error_prompt_length_corr']:.6f}"
         })
 
+    # Create and save MAE vs Distance plot
+    plot_mae_vs_distance_from_end(
+        test_preds, 
+        test_labels, 
+        output_dir=args.output_dir,
+        title="MAE vs Distance from End (Test Set)"
+    )
+    
     # Save token predictions to CSV
     preds_csv_path = os.path.join(args.output_dir, "test_predictions.csv")
     with open(preds_csv_path, 'w', newline='') as csvfile:
@@ -669,9 +719,12 @@ def evaluate_model(args):
                 'error': f"{error:.1f}"
             })
     
-    # Log predictions CSV to wandb
+    # Log predictions CSV and plot to wandb
     if args.use_wandb:
         wandb_logger.log_artifact(preds_csv_path, "test_predictions", "predictions")
+        # Log the plot to wandb
+        plot_path = os.path.join(args.output_dir, "mae_vs_distance_from_end.png")
+        wandb_logger.log_artifact(plot_path, "mae_vs_distance_plot", "plot")
     
     # Finish wandb logging
     if args.use_wandb and wandb_logger:
