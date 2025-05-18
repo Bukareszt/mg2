@@ -548,37 +548,57 @@ def train_model(args):
     
     return best_val_loss
 
-def plot_mae_vs_distance_from_end(preds, labels, output_dir=None, title="MAE vs Distance from End"):
+def plot_mae_vs_distance_from_end(preds, labels, output_dir=None, title="MAE vs Distance from End", window=3, min_count=5):
     """
-    Plots MAE as a function of the distance from the end of the generation (i.e., true token length).
+    Plots MAE as a function of the distance from the end of the generation (i.e., true token length),
+    including standard deviation and smoothing.
     
     Args:
         preds: List or array of predicted token lengths
         labels: List or array of true token lengths
         output_dir: If provided, saves the plot as a PNG in this directory
         title: Plot title
+        window: Size of smoothing window (rolling average)
+        min_count: Minimum number of samples per bin to include in the plot
     """
-    # Convert to numpy
     preds = np.array(preds)
     labels = np.array(labels)
 
-    # Create a DataFrame for easy binning
+    # Create DataFrame and compute absolute error
     df = pd.DataFrame({'true_length': labels, 'pred': preds})
     df['error'] = np.abs(df['true_length'] - df['pred'])
 
-    # Bin by distance from end (i.e. true_length)
-    grouped = df.groupby('true_length').agg(mae=('error', 'mean'), count=('error', 'count')).reset_index()
+    # Group by true length
+    grouped = df.groupby('true_length').agg(
+        mae=('error', 'mean'),
+        std=('error', 'std'),
+        count=('error', 'count')
+    ).reset_index()
 
-    # Filter to only bins with enough data
-    grouped = grouped[grouped['count'] >= 5]  # optional threshold for smoothing
+    # Filter out low-count bins
+    grouped = grouped[grouped['count'] >= min_count]
 
-    # Plot
+    # Apply smoothing using rolling window
+    grouped['mae_smooth'] = grouped['mae'].rolling(window=window, center=True).mean()
+    grouped['std_smooth'] = grouped['std'].rolling(window=window, center=True).mean()
+
+    # Plot with shaded standard deviation
     plt.figure(figsize=(10, 6))
-    plt.plot(grouped['true_length'], grouped['mae'], marker='o')
-    plt.xlabel("Distance from End (in tokens)")
-    plt.ylabel("MAE")
+    plt.plot(grouped['true_length'], grouped['mae_smooth'], label='MAE (smoothed)', color='blue')
+    plt.fill_between(
+        grouped['true_length'],
+        grouped['mae_smooth'] - grouped['std_smooth'],
+        grouped['mae_smooth'] + grouped['std_smooth'],
+        color='blue',
+        alpha=0.2,
+        label='±1 STD'
+    )
+    
+    plt.xlabel("Distance from End (True Token Length)")
+    plt.ylabel("Mean Absolute Error (MAE)")
     plt.title(title)
     plt.grid(True)
+    plt.legend()
     plt.tight_layout()
     
     if output_dir:
