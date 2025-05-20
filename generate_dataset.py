@@ -109,7 +109,7 @@ class EmbeddingExtractor:
     def extract_hidden_state_sequences_all_layers_to_single_tensor(
             self,
             dataset_name,
-            split="train[:100]",
+            split="train[:2000]",
             max_sequences=512,
             output_file="/lustre/pd01/hpc-tomasznaskret-1742832160/hidden_state_sequences_all_layers_entropy.pt"
     ):
