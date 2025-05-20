@@ -195,7 +195,7 @@ class EmbeddingExtractor:
         torch.save(all_layers_tensor, output_file)
         logger.info(f"✅ Saved all layers tensor of shape {all_layers_tensor.shape} to {output_file}")
 
-    def process_dataset(self, dataset_name, split="train[:1000]", output_file="trail_dataset_all_layers.pt", batch_size=10):
+    def process_dataset(self, dataset_name, split="train[:2500]", output_file="trail_dataset_all_layers.pt", batch_size=10):
         logger.info(f"Loading dataset: {dataset_name}, split: {split}")
         ds = load_dataset(dataset_name, split=split)
         logger.info(f"Dataset loaded with {len(ds)} examples")
@@ -307,7 +307,7 @@ def main():
 
     extractor.extract_hidden_state_sequences_all_layers_to_single_tensor(
         dataset_name="tatsu-lab/alpaca",
-        split="train[:100]",
+        split="train[:2500]",
     )
 
     logger.info("Dataset generation completed successfully")
