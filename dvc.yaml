@@ -299,41 +299,21 @@ stages:
          --wandb_project embeddings-length-predictor
        deps:
          - graph_regressor.py
-
-  # New stage for SHAP analysis of graph regressor models
-  shap_analysis:
-    foreach:
-      # Analyze different models with varying configurations
-      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 0 }
-      - { edge_mode: 'fully_connected', hidden_dim: 256, threshold: 0 }
-      - { edge_mode: 'fully_connected', hidden_dim: 128, threshold: 0 }
-    do:
-      cmd: >
-        python shap.py
-        --model_path results/graph_regressor_${item.edge_mode}_threshold${item.threshold}/model.pt
-        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
-        --edge_mode ${item.edge_mode}
-        --hidden_dim ${item.hidden_dim}
-        --length_threshold ${item.threshold}
-        --use_cuda
-        --use_wandb
-        --wandb_project embeddings-length-predictor
-        --wandb_name shap_analysis_${item.edge_mode}_hidden${item.hidden_dim}_threshold${item.threshold}
-
-  generate_dataset_with_label_counts:
-    foreach:
-      - { model: "google/gemma-7b", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_gemma_with_counts.pt" }
-      - { model: "mistralai/Mistral-7B-Instruct-v0.2", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_mistral_with_counts.pt" }
-      - { model: "meta-llama/Meta-Llama-3-8B-Instruct", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_llama_with_counts.pt" }
-    do:
-      cmd: >
-        python generate_dataset.py
-        --model ${item.model}
-        --dataset ${item.dataset}
-        --split ${item.split}
-        --output ${item.output}
-        --max_length 512
-        --log_level INFO
-        --log_file dataset_generation_${item.model}_${item.split}.log
-      deps:
-        - generate_dataset.py
+         
+    generate_dataset_with_label_counts:
+      foreach:
+        - { model: "google/gemma-7b", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_gemma_with_counts.pt" }
+        - { model: "mistralai/Mistral-7B-Instruct-v0.2", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_mistral_with_counts.pt" }
+        - { model: "meta-llama/Meta-Llama-3-8B-Instruct", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_llama_with_counts.pt" }
+      do:
+        cmd: >
+          python generate_dataset.py
+          --model ${item.model}
+          --dataset ${item.dataset}
+          --split ${item.split}
+          --output ${item.output}
+          --max_length 512
+          --log_level INFO
+          --log_file dataset_generation_${item.model}_${item.split}.log
+        deps:
+          - generate_dataset.py
