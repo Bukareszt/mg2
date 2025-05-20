@@ -315,5 +315,5 @@ stages:
         --max_length 512
         --log_level INFO
         --log_file dataset_generation_${item.model}_${item.split}.log
-      deps:
-        - generate_dataset.py
+    deps:
+      - generate_dataset.py
