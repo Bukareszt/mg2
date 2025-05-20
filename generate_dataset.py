@@ -110,7 +110,6 @@ class EmbeddingExtractor:
             self,
             dataset_name,
             split="train[:2000]",
-            max_sequences=512,
             output_file="/lustre/pd01/hpc-tomasznaskret-1742832160/hidden_state_sequences_all_layers_entropy.pt"
     ):
         logger.info(f"Loading dataset: {dataset_name}, split: {split}")
@@ -121,9 +120,6 @@ class EmbeddingExtractor:
         collected = 0
 
         for example in tqdm(ds, desc="Collecting hidden states"):
-            if collected >= max_sequences:
-                break
-
             prompt = example["text"]
 
             try:
