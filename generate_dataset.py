@@ -247,12 +247,18 @@ class EmbeddingExtractor:
         saved_data["labels"] = torch.tensor(all_labels)
         torch.save(saved_data, output_file)
         
+        # Count frequency of each label class
+        label_counts = {}
+        for label in all_labels:
+            label_counts[label] = label_counts.get(label, 0) + 1
+        
         # Save queries and generated lengths to a separate file
         metadata_file = os.path.splitext(output_file)[0] + "_metadata.pt"
         logger.info(f"Saving queries and generated lengths to {metadata_file}")
         metadata = {
             "queries": all_queries,
-            "generated_lengths": all_gen_lengths
+            "generated_lengths": all_gen_lengths,
+            "label_counts": label_counts
         }
         torch.save(metadata, metadata_file)
 
@@ -260,6 +266,7 @@ class EmbeddingExtractor:
         logger.info(f"✅ Metadata saved to {metadata_file}")
         logger.info(f"🔢 Total examples: {len(all_labels)}")
         logger.info(f"🧠 Layers saved: {list(all_layer_embeddings.keys())}")
+        logger.info(f"📊 Label distribution: {label_counts}")
 
 
 def main():
