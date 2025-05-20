@@ -319,3 +319,21 @@ stages:
         --use_wandb
         --wandb_project embeddings-length-predictor
         --wandb_name shap_analysis_${item.edge_mode}_hidden${item.hidden_dim}_threshold${item.threshold}
+
+  generate_dataset_with_label_counts:
+    foreach:
+      - { model: "google/gemma-7b", dataset: "tatsu-lab/alpaca", split: "train[:5000]", output: "trail_dataset_gemma_with_counts.pt" }
+      - { model: "mistralai/Mistral-7B-Instruct-v0.2", dataset: "tatsu-lab/alpaca", split: "train[:5000]", output: "trail_dataset_mistral_with_counts.pt" }
+      - { model: "meta-llama/Meta-Llama-3-8B-Instruct", dataset: "tatsu-lab/alpaca", split: "train[:5000]", output: "trail_dataset_llama_with_counts.pt" }
+    do:
+      cmd: >
+        python generate_dataset.py
+        --model ${item.model}
+        --dataset ${item.dataset}
+        --split ${item.split}
+        --output ${item.output}
+        --max_length 512
+        --log_level INFO
+        --log_file dataset_generation_${item.model}_${item.split}.log
+      deps:
+        - generate_dataset.py
