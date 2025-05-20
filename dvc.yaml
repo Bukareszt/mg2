@@ -314,4 +314,3 @@ stages:
         --output ${item.output}
         --max_length 512
         --log_level INFO
-        --log_file dataset_generation_${item.model}_${item.split}.log
