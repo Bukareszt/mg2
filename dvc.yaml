@@ -307,7 +307,7 @@ stages:
        - { model: "meta-llama/Meta-Llama-3-8B-Instruct", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_llama_with_counts.pt" }
     do:
       cmd: >
-      python generate_dataset.py
+        python generate_dataset.py
         --model ${item.model}
         --dataset ${item.dataset}
         --split ${item.split}
@@ -315,5 +315,3 @@ stages:
         --max_length 512
         --log_level INFO
         --log_file dataset_generation_${item.model}_${item.split}.log
-    deps:
-      - generate_dataset.py
