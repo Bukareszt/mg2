@@ -295,16 +295,16 @@ def main():
         max_length=args.max_length
     )
 
-    # extractor.process_dataset(
-    #     dataset_name=args.dataset,
-    #     split=args.split,
-    #     output_file=args.output
-    # )
-
-    extractor.extract_hidden_state_sequences_all_layers_to_single_tensor(
-        dataset_name="tatsu-lab/alpaca",
-        split="train[:2500]",
+    extractor.process_dataset(
+        dataset_name=args.dataset,
+        split=args.split,
+        output_file=args.output
     )
+
+    # extractor.extract_hidden_state_sequences_all_layers_to_single_tensor(
+    #     dataset_name="tatsu-lab/alpaca",
+    #     split="train[:2500]",
+    # )
 
     logger.info("Dataset generation completed successfully")
 

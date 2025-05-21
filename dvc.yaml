@@ -1,46 +1,18 @@
 stages:
-  train_bert_length_predictors:
+  generate_dataset_with_label_counts:
     foreach:
-      - 10
-      - 50
+       - { model: "google/gemma-7b", dataset: "tatsu-lab/alpaca", split: "train[:1000]", output: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt" }
+    #    - { model: "mistralai/Mistral-7B-Instruct-v0.2", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_mistral_with_counts.pt" }
+    #    - { model: "meta-llama/Meta-Llama-3-8B-Instruct", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_llama_with_counts.pt" }
     do:
       cmd: >
-        python lenght_prediction.py
-        --data_dir data/lmsys_vicuna-13b_preview0_${item}K
-        --model_name google-bert/bert-base-uncased
-        --output_dir results/bert_length_predictor_${item}
-        --batch_size 5
-        --seed 42
-        --use_wandb
-        --wandb_project output-length-prediction
-        --do_eval
-        --do_train
-
-#   Add new stage to train BERT length prediction with metadata
-  train_bert_length_predictors_metadata:
-     foreach:
-       - { model: "bert-base-uncased", hidden_dim: 512, metadata: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2_metadata.pt" }
-       - { model: "bert-base-uncased", hidden_dim: 256, metadata: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2_metadata.pt" }
-       - { model: "bert-base-uncased", hidden_dim: 256, metadata: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2_metadata.pt" }
-     do:
-       cmd: >
-         python lenght_prediction.py
-         --metadata_path ${item.metadata}
-         --model_name ${item.model}
-         --output_dir results/bert_length_predictor_metadata_${item.model}
-         --batch_size 32
-         --learning_rate 1e-3
-         --num_epochs 30
-         --seed 42
-         --use_wandb
-         --wandb_project output-length-prediction
-         --do_train
-         --do_eval
-         --early_stopping_patience 5
-         --max_samples 1000
-         --hidden_dim ${item.hidden_dim}
-       deps:
-         - lenght_prediction.py
+        python generate_dataset.py
+        --model ${item.model}
+        --dataset ${item.dataset}
+        --split ${item.split}
+        --output ${item.output}
+        --max_length 512
+        --log_level INFO
 
   train_binned_predictors_trail:
      foreach:
@@ -73,7 +45,7 @@ stages:
      do:
        cmd: >
          python bines.py
-         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt 
          --layer_name ${item.layer}
          --output_dir results/binned_predictor_trail_${item.layer}_hidden${item.hidden_dim}
          --hidden_dim ${item.hidden_dim}
@@ -101,7 +73,7 @@ stages:
      do:
        cmd: >
          python bines_agg.py
-         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt
          --layer_names ${item.layers}
          --aggregation ${item.agg}
          --output_dir results/binned_predictor_${item.agg}_hidden${item.hidden_dim}
@@ -127,7 +99,7 @@ stages:
        cmd: >
          python pia.py
          --model_id ${item.model}
-         --metadata_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2_metadata.pt
+         --metadata_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt
          --max_samples 1000
          --max_new_tokens ${item.max_new_tokens}
          --use_wandb
@@ -149,7 +121,7 @@ stages:
     do:
       cmd: >
         python graph_regressor.py
-        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt
         --output_dir results/graph_regressor_${item.edge_mode}_threshold${item.threshold}
         --length_threshold ${item.threshold}
         --do_eval
@@ -221,7 +193,7 @@ stages:
     do:
       cmd: >
         python bines.py
-        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt
         --layer_name ${item.layer}
         --output_dir results/binned_predictor_${item.layer}_threshold${item.threshold}
         --hidden_dim ${item.hidden_dim}
@@ -258,7 +230,7 @@ stages:
     do:
       cmd: >
         python bines_agg.py
-        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt
         --layer_names ${item.layers}
         --aggregation ${item.agg}
         --output_dir results/binned_predictor_${item.agg}_layers12-15_threshold${item.threshold}
@@ -283,7 +255,7 @@ stages:
      do:
        cmd: >
          python graph_regressor.py
-         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_layers2.pt
+         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt
          --output_dir results/graph_regressor_${item.edge_mode}
          --do_eval
          --do_train
@@ -300,17 +272,3 @@ stages:
        deps:
          - graph_regressor.py
          
-  generate_dataset_with_label_counts:
-    foreach:
-       - { model: "google/gemma-7b", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_gemma_with_counts.pt" }
-    #    - { model: "mistralai/Mistral-7B-Instruct-v0.2", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_mistral_with_counts.pt" }
-    #    - { model: "meta-llama/Meta-Llama-3-8B-Instruct", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_llama_with_counts.pt" }
-    do:
-      cmd: >
-        python generate_dataset.py
-        --model ${item.model}
-        --dataset ${item.dataset}
-        --split ${item.split}
-        --output ${item.output}
-        --max_length 512
-        --log_level INFO
