@@ -305,7 +305,7 @@ stages:
        - { model: "google/gemma-7b", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_gemma_with_counts.pt" }
     #    - { model: "mistralai/Mistral-7B-Instruct-v0.2", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_mistral_with_counts.pt" }
     #    - { model: "meta-llama/Meta-Llama-3-8B-Instruct", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_llama_with_counts.pt" }
-    # do:
+    do:
       cmd: >
         python generate_dataset.py
         --model ${item.model}
