@@ -16,24 +16,6 @@ stages:
 
   train_binned_predictors_trail:
      foreach:
-       - {layer: 'layer_8', hidden_dim: 128}
-       - {layer: 'layer_9', hidden_dim: 128}
-       - {layer: 'layer_10', hidden_dim: 128}
-       - {layer: 'layer_11', hidden_dim: 128}
-       - {layer: 'layer_12', hidden_dim: 128}
-       - {layer: 'layer_13', hidden_dim: 128}
-       - {layer: 'layer_14', hidden_dim: 128}
-       - {layer: 'layer_15', hidden_dim: 128}
-      
-       - {layer: 'layer_8', hidden_dim: 256}
-       - {layer: 'layer_9', hidden_dim: 256}
-       - {layer: 'layer_10', hidden_dim: 256}
-       - {layer: 'layer_11', hidden_dim: 256}
-       - {layer: 'layer_12', hidden_dim: 256}
-       - {layer: 'layer_13', hidden_dim: 256}
-       - {layer: 'layer_14', hidden_dim: 256}
-       - {layer: 'layer_15', hidden_dim: 512}
-
        - {layer: 'layer_8', hidden_dim: 512}
        - {layer: 'layer_9', hidden_dim: 512}
        - {layer: 'layer_10', hidden_dim: 512}
