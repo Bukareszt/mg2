@@ -485,8 +485,7 @@ def evaluate_model(args):
         
         # Log the plot to wandb
         plot_path = os.path.join(args.output_dir, "mae_vs_distance_from_end.png")
-        if os.path.exists(plot_path):
-            wandb_logger.log_image(plot_path, "mae_vs_distance_plot")
+        wandb_logger.log_artifact(plot_path, "mae_vs_distance_plot", "plot")
         
         wandb_logger.finish()
     
