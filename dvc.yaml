@@ -177,7 +177,7 @@ stages:
         python bines.py
         --data_path ./trail_dataset_mistral_with_counts.pt
         --layer_name ${item.layer}
-        --output_dir results/binned_predictor_${item.layer}_threshold${item.threshold}
+        --output_dir results/binned_predictor_trail_${item.layer}_hidden${item.hidden_dim}
         --hidden_dim ${item.hidden_dim}
         --learning_rate 1e-3
         --batch_size 32
