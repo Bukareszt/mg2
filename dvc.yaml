@@ -27,7 +27,7 @@ stages:
      do:
        cmd: >
          python bines.py
-         --data_path ./trail_dataset_mistral_with_counts.pt
+         --data_path ./trail_dataset_llama_with_counts.pt
          --layer_name ${item.layer}
          --output_dir results/binned_predictor_trail_${item.layer}_hidden${item.hidden_dim}
          --hidden_dim ${item.hidden_dim}
@@ -104,7 +104,7 @@ stages:
     do:
       cmd: >
         python graph_regressor.py
-        --data_path ./trail_dataset_mistral_with_counts.pt
+        --data_path ./trail_dataset_llama_with_counts.pttrail_dataset_llama_with_counts.pt
         --output_dir results/graph_regressor_${item.edge_mode}
         --length_threshold ${item.threshold}
         --do_eval
@@ -236,7 +236,7 @@ stages:
      do:
        cmd: >
          python graph_regressor.py
-         --data_path ./trail_dataset_mistral_with_counts.pt
+         --data_path ./trail_dataset_llama_with_counts.pt
          --output_dir results/graph_regressor_${item.edge_mode}
          --do_eval
          --do_train
