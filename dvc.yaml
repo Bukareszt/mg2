@@ -234,7 +234,7 @@ stages:
 
   train_graph_regressors:
      foreach:
-       - { edge_mode: 'fully_connected', hidden_dim: 512 }
+       - { edge_mode: 'fully_connected', hidden_dim: 256 }
      do:
        cmd: >
          python graph_regressor.py
