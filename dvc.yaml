@@ -2,7 +2,7 @@ stages:
   generate_dataset_with_label_counts:
     foreach:
       #  - { model: "google/gemma-7b", dataset: "tatsu-lab/alpaca", split: "train[:1000]", output: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt" }
-       - { model: "mistralai/Mistral-7B-Instruct-v0.2", dataset: "tatsu-lab/alpaca", split: "train[:1000]", output: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_mistral_with_counts.pt" }
+      #  - { model: "mistralai/Mistral-7B-Instruct-v0.2", dataset: "tatsu-lab/alpaca", split: "train[:1000]", output: "/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_mistral_with_counts.pt" }
     #    - { model: "meta-llama/Meta-Llama-3-8B-Instruct", dataset: "tatsu-lab/alpaca", split: "train[:2500]", output: "trail_dataset_llama_with_counts.pt" }
     do:
       cmd: >
@@ -27,7 +27,7 @@ stages:
      do:
        cmd: >
          python bines.py
-         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt 
+         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_mistral_with_counts.pt
          --layer_name ${item.layer}
          --output_dir results/binned_predictor_trail_${item.layer}_hidden${item.hidden_dim}
          --hidden_dim ${item.hidden_dim}
@@ -56,7 +56,7 @@ stages:
      do:
        cmd: >
          python bines_agg.py
-         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt
+         --data_path 
          --layer_names ${item.layers}
          --aggregation ${item.agg}
          --output_dir results/binned_predictor_${item.agg}_hidden${item.hidden_dim}
@@ -82,7 +82,7 @@ stages:
        cmd: >
          python pia.py
          --model_id ${item.model}
-         --metadata_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt
+         --metadata_path ./trail_dataset_mistral_with_counts.pt
          --max_samples 1000
          --max_new_tokens ${item.max_new_tokens}
          --use_wandb
@@ -104,7 +104,7 @@ stages:
     do:
       cmd: >
         python graph_regressor.py
-        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt
+        --data_path ./trail_dataset_mistral_with_counts.pt
         --output_dir results/graph_regressor_${item.edge_mode}_threshold${item.threshold}
         --length_threshold ${item.threshold}
         --do_eval
@@ -176,7 +176,7 @@ stages:
     do:
       cmd: >
         python bines.py
-        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt
+        --data_path ./trail_dataset_mistral_with_counts.pt
         --layer_name ${item.layer}
         --output_dir results/binned_predictor_${item.layer}_threshold${item.threshold}
         --hidden_dim ${item.hidden_dim}
@@ -213,7 +213,7 @@ stages:
     do:
       cmd: >
         python bines_agg.py
-        --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt
+        --data_path ./trail_dataset_mistral_with_counts.pt
         --layer_names ${item.layers}
         --aggregation ${item.agg}
         --output_dir results/binned_predictor_${item.agg}_layers12-15_threshold${item.threshold}
@@ -238,7 +238,7 @@ stages:
      do:
        cmd: >
          python graph_regressor.py
-         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt
+         --data_path ./trail_dataset_mistral_with_counts.pt
          --output_dir results/graph_regressor_${item.edge_mode}
          --do_eval
          --do_train
