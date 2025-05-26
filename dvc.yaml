@@ -40,6 +40,7 @@ stages:
          --use_wandb
          --wandb_project embeddings-length-predictor
          --do_eval
+         --do_train
          --early_stopping_patience 5
        deps:
          - bines.py
