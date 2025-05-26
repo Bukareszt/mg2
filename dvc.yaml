@@ -105,7 +105,7 @@ stages:
       cmd: >
         python graph_regressor.py
         --data_path ./trail_dataset_mistral_with_counts.pt
-        --output_dir results/graph_regressor_${item.edge_mode}_threshold${item.threshold}
+        --output_dir results/graph_regressor_${item.edge_mode}
         --length_threshold ${item.threshold}
         --do_eval
         --batch_size 32
@@ -119,7 +119,6 @@ stages:
         --use_wandb
         --wandb_project embeddings-length-predictor
         --length_upper_threshold ${item.length_upper_threshold}
-        --do_train
       deps:
         - graph_regressor.py
 
@@ -235,7 +234,6 @@ stages:
   train_graph_regressors:
      foreach:
        - { edge_mode: 'fully_connected', hidden_dim: 512 }
-       - { edge_mode: 'fully_connected', hidden_dim: 256 }
      do:
        cmd: >
          python graph_regressor.py
