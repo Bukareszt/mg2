@@ -701,6 +701,18 @@ def evaluate_model(args):
     logger.info(f"  Norm. MAE: {test_metrics['normalized_mae']:.4f}")
     logger.info(f"  Error-Length Corr: {test_metrics['error_prompt_length_corr']:.4f}")
 
+    # Log test metrics to wandb
+    if args.use_wandb and wandb_logger:
+        test_wandb_metrics = {
+            "test/loss": test_metrics['loss'],
+            "test/mae": test_metrics['mae'],
+            "test/rmse": test_metrics['rmse'],
+            "test/r2": test_metrics['r2'],
+            "test/normalized_mae": test_metrics['normalized_mae'],
+            "test/error_prompt_length_corr": test_metrics['error_prompt_length_corr'],
+        }
+        wandb_logger.log_metrics(test_wandb_metrics, step=0)
+
     # Save test results to CSV
     csv_path = os.path.join(args.output_dir, "test_results.csv")
     with open(csv_path, 'w', newline='') as csvfile:
