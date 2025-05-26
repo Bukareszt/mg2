@@ -237,7 +237,7 @@ stages:
      do:
        cmd: >
          python graph_regressor.py
-         --data_path ./trail_dataset_llama_with_counts.pt
+         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt
          --output_dir results/graph_regressor_${item.edge_mode}
          --do_eval
          --do_train
