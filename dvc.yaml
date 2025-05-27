@@ -47,16 +47,22 @@ stages:
 
   train_binned_predictors_agg:
      foreach:
-       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 512 }
-       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 512 }
-       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'concat', hidden_dim: 512 }
+       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 512, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
+       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 512, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
+       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'concat', hidden_dim: 512, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
+       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 512, data_path: './trail_dataset_mistral_with_counts.pt', dataset_name: 'mistral' }
+       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 512, data_path: './trail_dataset_mistral_with_counts.pt', dataset_name: 'mistral' }
+       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'concat', hidden_dim: 512, data_path: './trail_dataset_mistral_with_counts.pt', dataset_name: 'mistral' }
+       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 512, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt', dataset_name: 'gemma' }
+       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 512, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt', dataset_name: 'gemma' }
+       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'concat', hidden_dim: 512, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt', dataset_name: 'gemma' }
      do:
        cmd: >
          python bines_agg.py
-         --data_path 
+         --data_path ${item.data_path}
          --layer_names ${item.layers}
          --aggregation ${item.agg}
-         --output_dir results/binned_predictor_${item.agg}_hidden${item.hidden_dim}
+         --output_dir results/binned_predictor_${item.agg}_${item.dataset_name}_hidden${item.hidden_dim}
          --hidden_dim ${item.hidden_dim}
          --learning_rate 1e-3
          --batch_size 32
