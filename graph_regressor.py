@@ -229,7 +229,7 @@ def split_dataset(dataset, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, see
     return train_dataset, val_dataset, test_dataset
 
 
-def load_dataset(path, edge_mode="sequential", length_threshold=None):
+def load_dataset(path, edge_mode="sequential", length_threshold=None, layer_names=None):
     """
     Load dataset without length filtering (moved to separate function)
     """
@@ -237,11 +237,24 @@ def load_dataset(path, edge_mode="sequential", length_threshold=None):
     data = torch.load(path)
 
     embeddings_by_layer = {k: v for k, v in data.items() if k.startswith("layer_")}
+    
+    # Filter layers based on layer_names argument
+    if layer_names:
+        filtered_embeddings = {}
+        for layer_name in layer_names:
+            if layer_name in embeddings_by_layer:
+                filtered_embeddings[layer_name] = embeddings_by_layer[layer_name]
+            else:
+                logger.warning(f"Layer {layer_name} not found in dataset. Available layers: {list(embeddings_by_layer.keys())}")
+        embeddings_by_layer = filtered_embeddings
+        logger.info(f"Using selected {len(embeddings_by_layer)} layers: {list(embeddings_by_layer.keys())}")
+    else:
+        logger.info(f"Using all {len(embeddings_by_layer)} layers: {list(embeddings_by_layer.keys())}")
+    
     labels = data["labels"]
     
     # Length filtering was here but is now removed from initial loading
 
-    logger.info(f"Using all {len(embeddings_by_layer)} layers: {list(embeddings_by_layer.keys())}")
     dataset = LayerwiseGraphDataset(embeddings_by_layer, labels, edge_mode=edge_mode)
     logger.info(f"✅ Created dataset with {len(dataset)} graphs (1 per token)")
 
@@ -298,7 +311,12 @@ def train_model(args):
     config = vars(args)
     config['loss_type'] = "L1Loss"  # We're using L1Loss
     
-    model_name = f"graph-regressor-{args.edge_mode}"
+    # Create model name that includes layer information
+    if args.layer_names:
+        layer_suffix = "_".join(args.layer_names)
+        model_name = f"graph-regressor-{args.edge_mode}-layers-{layer_suffix}"
+    else:
+        model_name = f"graph-regressor-{args.edge_mode}-all-layers"
     
     wandb_logger = Logger(
         config=config,
@@ -308,8 +326,8 @@ def train_model(args):
         log_model=args.log_model
     )
     
-    # Load dataset without filtering
-    dataset = load_dataset(args.data_path, args.edge_mode)
+    # Load dataset without filtering, but with layer selection
+    dataset = load_dataset(args.data_path, args.edge_mode, layer_names=args.layer_names)
     
     # Split dataset
     train_dataset, val_dataset, test_dataset = split_dataset(
@@ -499,14 +517,15 @@ def train_model(args):
             best_val_loss = val_metrics["loss"]
             early_stop_counter = 0
             
-            # Save the model
+            # Save the model with layer information
             checkpoint = {
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'val_loss': val_metrics["loss"],
                 'input_dim': input_dim,
-                'hidden_dim': args.hidden_dim
+                'hidden_dim': args.hidden_dim,
+                'layer_names': args.layer_names  # Save layer names used
             }
             torch.save(checkpoint, os.path.join(args.output_dir, "best_model.pt"))
             
@@ -525,14 +544,15 @@ def train_model(args):
                 logger.info(f"Early stopping triggered after {epoch+1} epochs")
                 break
     
-    # Save the final model
+    # Save the final model with layer information
     checkpoint = {
         'epoch': args.num_epochs - 1,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'val_loss': val_metrics["loss"],
         'input_dim': input_dim,
-        'hidden_dim': args.hidden_dim
+        'hidden_dim': args.hidden_dim,
+        'layer_names': args.layer_names  # Save layer names used
     }
     torch.save(checkpoint, os.path.join(args.output_dir, "final_model.pt"))
     
@@ -624,7 +644,12 @@ def evaluate_model(args):
         config = vars(args)
         config['phase'] = 'evaluation'
         
-        model_name = f"eval-graph-regressor-{args.edge_mode}"
+        # Create model name that includes layer information
+        if args.layer_names:
+            layer_suffix = "_".join(args.layer_names)
+            model_name = f"eval-graph-regressor-{args.edge_mode}-layers-{layer_suffix}"
+        else:
+            model_name = f"eval-graph-regressor-{args.edge_mode}-all-layers"
         
         wandb_logger = Logger(
             config=config,
@@ -634,8 +659,8 @@ def evaluate_model(args):
             log_model=False
         )
     
-    # Load dataset without filtering
-    dataset = load_dataset(args.data_path, args.edge_mode)
+    # Load dataset without filtering, but with layer selection
+    dataset = load_dataset(args.data_path, args.edge_mode, layer_names=args.layer_names)
     
     # Split dataset
     _, _, test_dataset = split_dataset(
@@ -671,6 +696,12 @@ def evaluate_model(args):
         checkpoint = torch.load(os.path.join(args.output_dir, "best_model.pt"), map_location=device)
         input_dim = checkpoint.get('input_dim')
         hidden_dim = checkpoint.get('hidden_dim', args.hidden_dim)
+        saved_layer_names = checkpoint.get('layer_names')
+        
+        # Verify layer names match if both are specified
+        if args.layer_names and saved_layer_names:
+            if set(args.layer_names) != set(saved_layer_names):
+                logger.warning(f"Layer names mismatch! Model trained on {saved_layer_names}, but evaluation requested {args.layer_names}")
         
         # If input_dim is not stored in the checkpoint, get it from the dataset
         if input_dim is None:
@@ -683,6 +714,8 @@ def evaluate_model(args):
         model.eval()
         
         logger.info(f"Loaded model from {os.path.join(args.output_dir, 'best_model.pt')}")
+        if saved_layer_names:
+            logger.info(f"Model was trained on layers: {saved_layer_names}")
     except Exception as e:
         logger.error(f"Error loading model: {e}")
         raise
@@ -835,6 +868,7 @@ def main():
                         help="Weights & Biases group name for experiment comparison")
     parser.add_argument("--explain", action="store_true",
                     help="Run GNNExplainer on the trained model")
+    parser.add_argument('--layer_names', nargs='+', default=None, help="List of layer names to use (e.g., layer_8 layer_16). If not specified, all layers will be used.")
 
     args = parser.parse_args()
     
