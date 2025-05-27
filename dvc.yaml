@@ -47,12 +47,9 @@ stages:
 
   train_binned_predictors_agg:
      foreach:
-       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 128 }
-       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 128 }
-       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 256 }
-       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 256 }
        - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'sum', hidden_dim: 512 }
        - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'mean', hidden_dim: 512 }
+       - {layers: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', agg: 'concat', hidden_dim: 512 }
      do:
        cmd: >
          python bines_agg.py
