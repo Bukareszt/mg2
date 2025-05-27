@@ -95,11 +95,11 @@ stages:
   ablation_graph_length_thresholds:
     foreach:
       # Testing multiple thresholds with fully connected graph across all datasets
-      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 0, length_upper_threshold: 40, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
-      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 40, length_upper_threshold: 80, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
-      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 80, length_upper_threshold: 120, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
-      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 120, length_upper_threshold: 240, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
-      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 240, length_upper_threshold: 400, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 0, length_upper_threshold: 40, model: 'llama', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 40, length_upper_threshold: 80, model: 'llama', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 80, length_upper_threshold: 120, model: 'llama', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 120, length_upper_threshold: 240, model: 'llama', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 240, length_upper_threshold: 400, model: 'llama', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
       - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 400, length_upper_threshold: 600, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', dataset_name: 'llama' }
       
       - { edge_mode: 'fully_connected', hidden_dim: 512, threshold: 0, length_upper_threshold: 40, data_path: './trail_dataset_mistral_with_counts.pt', dataset_name: 'mistral' }
@@ -119,7 +119,7 @@ stages:
       cmd: >
         python graph_regressor.py
         --data_path ${item.data_path}
-        --output_dir results/graph_regressor_${item.edge_mode}_${item.dataset_name}_threshold${item.threshold}
+        --output_dir results/graph_regressor_${item.edge_mode}_${item.dataset_name}
         --length_threshold ${item.threshold}
         --do_eval
         --batch_size 32
@@ -246,13 +246,14 @@ stages:
 
   train_graph_regressors:
      foreach:
-       - { edge_mode: 'fully_connected', hidden_dim: 512 }
-       - { edge_mode: 'fully_connected', hidden_dim: 256 }
+       - { edge_mode: 'fully_connected', hidden_dim: 512, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', model_name: 'llama' }
+       - { edge_mode: 'fully_connected', hidden_dim: 512, data_path: './trail_dataset_mistral_with_counts.pt', model_name: 'mistral' }
+       - { edge_mode: 'fully_connected', hidden_dim: 512, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt', model_name: 'gemma' }
      do:
        cmd: >
          python graph_regressor.py
-         --data_path /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt
-         --output_dir results/graph_regressor_${item.edge_mode}
+         --data_path ${item.data_path}
+         --output_dir results/graph_regressor_${item.edge_mode}_${item.model_name}
          --do_eval
          --do_train
          --batch_size 16
@@ -267,7 +268,7 @@ stages:
          --wandb_project embeddings-length-predictor
        deps:
          - graph_regressor.py
-         
+
   # train_graph_regressors_with_layers:
   #   foreach:
   #     - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt }
