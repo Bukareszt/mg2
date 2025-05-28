@@ -316,6 +316,3 @@ stages:
         --use_wandb
         --wandb_project embeddings-length-predictor
         --layer_names ${item.layer_names}
-       deps:
-         - graph_regressor.py
-
