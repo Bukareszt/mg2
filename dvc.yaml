@@ -276,7 +276,7 @@ stages:
          --num_workers 4
          --edge_mode ${item.edge_mode}
          --model_type ${item.model_type}
-         ${ item.num_heads and "--num_heads " + str(item.num_heads) or "" }
+         --num_heads ${item.num_heads}
          --use_wandb
          --wandb_project embeddings-length-predictor
        deps:
