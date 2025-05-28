@@ -264,7 +264,7 @@ stages:
        cmd: >
          python graph_regressor.py
          --data_path ${item.data_path}
-         --output_dir results/graph_regressor_${item.model_type}_${item.edge_mode}_${item.model_name}${ item.num_heads and "_heads" + str(item.num_heads) or "" }
+         --output_dir results/graph_regressor_${item.model_type}_${item.edge_mode}_${item.model_name}
          --do_eval
          --do_train
          --batch_size 16
