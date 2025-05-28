@@ -274,30 +274,22 @@ stages:
 
   train_graph_regressors_with_layers:
     foreach:
-      - { edge_mode: 'fully_connected', hidden_dim: 128, layer_names: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt' }
-      - { edge_mode: 'fully_connected', hidden_dim: 128, layer_names: 'layer_8 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt' }
-      - { edge_mode: 'fully_connected', hidden_dim: 128, layer_names: 'layer_8 layer_9 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt' }
-      - { edge_mode: 'fully_connected', hidden_dim: 128, layer_names: 'layer_8 layer_9 layer_10 layer_12 layer_13 layer_14 layer_15', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt' }
-      - { edge_mode: 'fully_connected', hidden_dim: 128, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_13 layer_14 layer_15', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt' }
-      - { edge_mode: 'fully_connected', hidden_dim: 128, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_14 layer_15', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt' }
-      - { edge_mode: 'fully_connected', hidden_dim: 128, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_15', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt' }
-      - { edge_mode: 'fully_connected', hidden_dim: 128, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt' }
-  #  - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_12 layer_13 layer_14 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_13 layer_14 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_14 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', data_path: ./trail_dataset_mistral_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_12 layer_13 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_13 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
-    #   - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: './trail_dataset_mistral_with_counts.pt' }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_12 layer_13 layer_14 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_13 layer_14 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_14 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_15', data_path: ./trail_dataset_mistral_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', data_path: ./trail_dataset_mistral_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_9 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_10 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_11 layer_12 layer_13 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_12 layer_13 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_13 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_14 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_15', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
+      - { edge_mode: 'fully_connected', hidden_dim: 512, layer_names: 'layer_8 layer_9 layer_10 layer_11 layer_12 layer_13 layer_14', data_path: /lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt }
     do:
       cmd: >
         python graph_regressor.py
