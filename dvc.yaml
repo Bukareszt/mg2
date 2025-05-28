@@ -257,9 +257,9 @@ stages:
        - { edge_mode: 'fully_connected', hidden_dim: 512, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_llama_with_counts.pt', model_name: 'llama', model_type: 'gat', num_heads: 4 }
        - { edge_mode: 'fully_connected', hidden_dim: 512, data_path: './trail_dataset_mistral_with_counts.pt', model_name: 'mistral', model_type: 'gat', num_heads: 4 }
        - { edge_mode: 'fully_connected', hidden_dim: 512, data_path: '/lustre/pd01/hpc-tomasznaskret-1742832160/trail_dataset_gemma_with_counts.pt', model_name: 'gemma', model_type: 'gat', num_heads: 4 }
-       # GAT with different number of heads
-       - { edge_mode: 'fully_connected', hidden_dim: 512, data_path: './trail_dataset_mistral_with_counts.pt', model_name: 'mistral', model_type: 'gat', num_heads: 8 }
-       - { edge_mode: 'fully_connected', hidden_dim: 512, data_path: './trail_dataset_mistral_with_counts.pt', model_name: 'mistral', model_type: 'gat', num_heads: 2 }
+      #  # GAT with different number of heads
+      #  - { edge_mode: 'fully_connected', hidden_dim: 512, data_path: './trail_dataset_mistral_with_counts.pt', model_name: 'mistral', model_type: 'gat', num_heads: 8 }
+      #  - { edge_mode: 'fully_connected', hidden_dim: 512, data_path: './trail_dataset_mistral_with_counts.pt', model_name: 'mistral', model_type: 'gat', num_heads: 2 }
      do:
        cmd: >
          python graph_regressor.py
