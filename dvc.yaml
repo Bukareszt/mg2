@@ -258,7 +258,6 @@ stages:
          --data_path ${item.data_path}
          --output_dir results/graph_regressor_${item.edge_mode}_${item.model_name}
          --do_eval
-        #  --do_train
          --batch_size 16
          --learning_rate 1e-3
          --num_epochs 30
