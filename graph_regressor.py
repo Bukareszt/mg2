@@ -35,12 +35,12 @@ def run_explainer(model, dataset, device, output_dir, wandb_logger=None, num_exa
     Run GNNExplainer on the trained model and log results to wandb if available.
     """
     model.eval()
-    explainer = GNNExplainer(model, epochs=30, return_type='regression')
+    explainer = GNNExplainer(model, return_type='regression')
 
     for i in range(num_examples):
         data = dataset[i].to(device)
         try:
-            explanation = explainer.explain_graph(data.x, data.edge_index)
+            explanation = explainer.explain_graph(data.x, data.edge_index, epochs=30)
             logger.info(f"Explanation for example {i} obtained.")
 
             # Save explanation masks
