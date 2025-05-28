@@ -9,7 +9,7 @@ from torch.cuda.amp import autocast, GradScaler
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GCNConv, global_mean_pool
-from torch_geometric.explain import GNNExplainer
+from torch_geometric.explain import Explainer, GNNExplainer as GNNExplainerAlgorithm
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import numpy as np
 import random
@@ -35,18 +35,31 @@ def run_explainer(model, dataset, device, output_dir, wandb_logger=None, num_exa
     Run GNNExplainer on the trained model and log results to wandb if available.
     """
     model.eval()
-    explainer = GNNExplainer(model, return_type='regression')
+    
+    # Use the modern PyTorch Geometric explainer API
+    explainer = Explainer(
+        model=model,
+        algorithm=GNNExplainerAlgorithm(epochs=30),
+        explanation_type='model',
+        node_mask_type='attributes',
+        edge_mask_type='object',
+        model_config=dict(
+            mode='regression',
+            task_level='graph',
+            return_type='raw'
+        )
+    )
 
     for i in range(num_examples):
         data = dataset[i].to(device)
         try:
-            # Use the correct method name for newer PyTorch Geometric versions
-            explanation = explainer(data.x, data.edge_index, epochs=30)
+            # Get explanation using the modern API
+            explanation = explainer(data.x, data.edge_index, batch=None)
             logger.info(f"Explanation for example {i} obtained.")
 
-            # Save explanation masks
-            node_feat_mask = explanation.node_feat_mask.cpu().detach().numpy()
-            edge_mask = explanation.edge_mask.cpu().detach().numpy()
+            # Extract masks from explanation
+            node_feat_mask = explanation.node_mask.cpu().detach().numpy() if explanation.node_mask is not None else np.array([])
+            edge_mask = explanation.edge_mask.cpu().detach().numpy() if explanation.edge_mask is not None else np.array([])
 
             # Save to files
             node_mask_path = os.path.join(output_dir, f'node_feat_mask_{i}.npy')
@@ -56,18 +69,23 @@ def run_explainer(model, dataset, device, output_dir, wandb_logger=None, num_exa
             np.save(edge_mask_path, edge_mask)
 
             # Create and save visualization
-            plt.figure(figsize=(10, 6))
-            plt.subplot(1, 2, 1)
-            plt.bar(range(len(node_feat_mask)), node_feat_mask)
-            plt.title(f"Node Feature Importance (Example {i})")
-            plt.xlabel("Feature Index")
-            plt.ylabel("Importance")
+            plt.figure(figsize=(12, 5))
             
-            plt.subplot(1, 2, 2)
-            plt.bar(range(len(edge_mask)), edge_mask)
-            plt.title(f"Edge Importance (Example {i})")
-            plt.xlabel("Edge Index")
-            plt.ylabel("Importance")
+            # Plot node feature importance if available
+            if len(node_feat_mask) > 0:
+                plt.subplot(1, 2, 1)
+                plt.bar(range(len(node_feat_mask)), node_feat_mask)
+                plt.title(f"Node Feature Importance (Example {i})")
+                plt.xlabel("Feature Index")
+                plt.ylabel("Importance")
+            
+            # Plot edge importance if available
+            if len(edge_mask) > 0:
+                plt.subplot(1, 2, 2)
+                plt.bar(range(len(edge_mask)), edge_mask)
+                plt.title(f"Edge Importance (Example {i})")
+                plt.xlabel("Edge Index")
+                plt.ylabel("Importance")
             
             plt.tight_layout()
             plot_path = os.path.join(output_dir, f"explanation_plot_{i}.png")
@@ -85,14 +103,23 @@ def run_explainer(model, dataset, device, output_dir, wandb_logger=None, num_exa
                 
                 # Log summary statistics
                 explanation_metrics = {
-                    f"explanation/example_{i}/node_feat_importance_mean": float(np.mean(node_feat_mask)),
-                    f"explanation/example_{i}/node_feat_importance_std": float(np.std(node_feat_mask)),
-                    f"explanation/example_{i}/node_feat_importance_max": float(np.max(node_feat_mask)),
-                    f"explanation/example_{i}/edge_importance_mean": float(np.mean(edge_mask)),
-                    f"explanation/example_{i}/edge_importance_std": float(np.std(edge_mask)),
-                    f"explanation/example_{i}/edge_importance_max": float(np.max(edge_mask)),
                     f"explanation/example_{i}/true_length": float(data.y.item()),
                 }
+                
+                if len(node_feat_mask) > 0:
+                    explanation_metrics.update({
+                        f"explanation/example_{i}/node_feat_importance_mean": float(np.mean(node_feat_mask)),
+                        f"explanation/example_{i}/node_feat_importance_std": float(np.std(node_feat_mask)),
+                        f"explanation/example_{i}/node_feat_importance_max": float(np.max(node_feat_mask)),
+                    })
+                
+                if len(edge_mask) > 0:
+                    explanation_metrics.update({
+                        f"explanation/example_{i}/edge_importance_mean": float(np.mean(edge_mask)),
+                        f"explanation/example_{i}/edge_importance_std": float(np.std(edge_mask)),
+                        f"explanation/example_{i}/edge_importance_max": float(np.max(edge_mask)),
+                    })
+                
                 wandb_logger.log_metrics(explanation_metrics, step=i)
 
         except Exception as e:
