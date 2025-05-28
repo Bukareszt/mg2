@@ -69,19 +69,51 @@ def run_explainer(model, dataset, device, output_dir, wandb_logger=None, num_exa
             np.save(edge_mask_path, edge_mask)
 
             # Create and save visualization
-            plt.figure(figsize=(12, 5))
+            plt.figure(figsize=(15, 10))
             
             # Plot node feature importance if available
             if len(node_feat_mask) > 0:
-                plt.subplot(1, 2, 1)
-                plt.bar(range(len(node_feat_mask)), node_feat_mask)
-                plt.title(f"Node Feature Importance (Example {i})")
-                plt.xlabel("Feature Index")
-                plt.ylabel("Importance")
+                logger.info(f"Node mask shape: {node_feat_mask.shape}")
+                
+                if node_feat_mask.ndim == 2:
+                    # 2D mask: (num_nodes, num_features)
+                    # Show heatmap and also aggregate statistics
+                    plt.subplot(2, 2, 1)
+                    plt.imshow(node_feat_mask, aspect='auto', cmap='viridis')
+                    plt.title(f"Node Feature Importance Heatmap (Example {i})")
+                    plt.xlabel("Feature Index")
+                    plt.ylabel("Node Index")
+                    plt.colorbar()
+                    
+                    # Plot mean importance per node
+                    plt.subplot(2, 2, 2)
+                    node_importance = np.mean(node_feat_mask, axis=1)
+                    plt.bar(range(len(node_importance)), node_importance)
+                    plt.title(f"Mean Node Importance (Example {i})")
+                    plt.xlabel("Node Index")
+                    plt.ylabel("Mean Importance")
+                    
+                    # Plot mean importance per feature (top 20 features)
+                    plt.subplot(2, 2, 3)
+                    feature_importance = np.mean(node_feat_mask, axis=0)
+                    top_features = np.argsort(feature_importance)[-20:]  # Top 20 features
+                    plt.bar(range(len(top_features)), feature_importance[top_features])
+                    plt.title(f"Top 20 Feature Importance (Example {i})")
+                    plt.xlabel("Feature Rank")
+                    plt.ylabel("Mean Importance")
+                    
+                elif node_feat_mask.ndim == 1:
+                    # 1D mask: either per-node or per-feature
+                    plt.subplot(2, 2, 1)
+                    plt.bar(range(len(node_feat_mask)), node_feat_mask)
+                    plt.title(f"Node Feature Importance (Example {i})")
+                    plt.xlabel("Index")
+                    plt.ylabel("Importance")
             
             # Plot edge importance if available
             if len(edge_mask) > 0:
-                plt.subplot(1, 2, 2)
+                logger.info(f"Edge mask shape: {edge_mask.shape}")
+                plt.subplot(2, 2, 4)
                 plt.bar(range(len(edge_mask)), edge_mask)
                 plt.title(f"Edge Importance (Example {i})")
                 plt.xlabel("Edge Index")
@@ -89,7 +121,7 @@ def run_explainer(model, dataset, device, output_dir, wandb_logger=None, num_exa
             
             plt.tight_layout()
             plot_path = os.path.join(output_dir, f"explanation_plot_{i}.png")
-            plt.savefig(plot_path)
+            plt.savefig(plot_path, dpi=150, bbox_inches='tight')
             plt.close()  # Close the figure to free memory
             
             logger.info(f"Saved explanation visualization for example {i}.")
@@ -107,11 +139,27 @@ def run_explainer(model, dataset, device, output_dir, wandb_logger=None, num_exa
                 }
                 
                 if len(node_feat_mask) > 0:
-                    explanation_metrics.update({
-                        f"explanation/example_{i}/node_feat_importance_mean": float(np.mean(node_feat_mask)),
-                        f"explanation/example_{i}/node_feat_importance_std": float(np.std(node_feat_mask)),
-                        f"explanation/example_{i}/node_feat_importance_max": float(np.max(node_feat_mask)),
-                    })
+                    if node_feat_mask.ndim == 2:
+                        # For 2D masks, compute various statistics
+                        node_importance = np.mean(node_feat_mask, axis=1)
+                        feature_importance = np.mean(node_feat_mask, axis=0)
+                        
+                        explanation_metrics.update({
+                            f"explanation/example_{i}/node_importance_mean": float(np.mean(node_importance)),
+                            f"explanation/example_{i}/node_importance_std": float(np.std(node_importance)),
+                            f"explanation/example_{i}/node_importance_max": float(np.max(node_importance)),
+                            f"explanation/example_{i}/feature_importance_mean": float(np.mean(feature_importance)),
+                            f"explanation/example_{i}/feature_importance_std": float(np.std(feature_importance)),
+                            f"explanation/example_{i}/feature_importance_max": float(np.max(feature_importance)),
+                            f"explanation/example_{i}/overall_importance_mean": float(np.mean(node_feat_mask)),
+                            f"explanation/example_{i}/overall_importance_std": float(np.std(node_feat_mask)),
+                        })
+                    else:
+                        explanation_metrics.update({
+                            f"explanation/example_{i}/node_feat_importance_mean": float(np.mean(node_feat_mask)),
+                            f"explanation/example_{i}/node_feat_importance_std": float(np.std(node_feat_mask)),
+                            f"explanation/example_{i}/node_feat_importance_max": float(np.max(node_feat_mask)),
+                        })
                 
                 if len(edge_mask) > 0:
                     explanation_metrics.update({
