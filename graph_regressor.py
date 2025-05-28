@@ -40,7 +40,8 @@ def run_explainer(model, dataset, device, output_dir, wandb_logger=None, num_exa
     for i in range(num_examples):
         data = dataset[i].to(device)
         try:
-            explanation = explainer.explain_graph(data.x, data.edge_index, epochs=30)
+            # Use the correct method name for newer PyTorch Geometric versions
+            explanation = explainer(data.x, data.edge_index, epochs=30)
             logger.info(f"Explanation for example {i} obtained.")
 
             # Save explanation masks
@@ -96,6 +97,9 @@ def run_explainer(model, dataset, device, output_dir, wandb_logger=None, num_exa
 
         except Exception as e:
             logger.error(f"Failed to explain example {i}: {e}")
+            # Log the error details for debugging
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
 
 def free_gpu_memory():
