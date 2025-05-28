@@ -9,6 +9,7 @@ from torch.cuda.amp import autocast, GradScaler
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GCNConv, global_mean_pool
+from torch_geometric.explain import GNNExplainer
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import numpy as np
 import random
@@ -28,6 +29,74 @@ logging.basicConfig(
     handlers=[logging.FileHandler("graph_training.log"), logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
+
+def run_explainer(model, dataset, device, output_dir, wandb_logger=None, num_examples=1):
+    """
+    Run GNNExplainer on the trained model and log results to wandb if available.
+    """
+    model.eval()
+    explainer = GNNExplainer(model, epochs=200, return_type='regression')
+
+    for i in range(num_examples):
+        data = dataset[i].to(device)
+        try:
+            explanation = explainer.explain_graph(data.x, data.edge_index)
+            logger.info(f"Explanation for example {i} obtained.")
+
+            # Save explanation masks
+            node_feat_mask = explanation.node_feat_mask.cpu().detach().numpy()
+            edge_mask = explanation.edge_mask.cpu().detach().numpy()
+
+            # Save to files
+            node_mask_path = os.path.join(output_dir, f'node_feat_mask_{i}.npy')
+            edge_mask_path = os.path.join(output_dir, f'edge_mask_{i}.npy')
+            
+            np.save(node_mask_path, node_feat_mask)
+            np.save(edge_mask_path, edge_mask)
+
+            # Create and save visualization
+            plt.figure(figsize=(10, 6))
+            plt.subplot(1, 2, 1)
+            plt.bar(range(len(node_feat_mask)), node_feat_mask)
+            plt.title(f"Node Feature Importance (Example {i})")
+            plt.xlabel("Feature Index")
+            plt.ylabel("Importance")
+            
+            plt.subplot(1, 2, 2)
+            plt.bar(range(len(edge_mask)), edge_mask)
+            plt.title(f"Edge Importance (Example {i})")
+            plt.xlabel("Edge Index")
+            plt.ylabel("Importance")
+            
+            plt.tight_layout()
+            plot_path = os.path.join(output_dir, f"explanation_plot_{i}.png")
+            plt.savefig(plot_path)
+            plt.close()  # Close the figure to free memory
+            
+            logger.info(f"Saved explanation visualization for example {i}.")
+            
+            # Log to wandb if available
+            if wandb_logger:
+                # Log the explanation masks as artifacts
+                wandb_logger.log_artifact(node_mask_path, f"node_feat_mask_example_{i}", "explanation")
+                wandb_logger.log_artifact(edge_mask_path, f"edge_mask_example_{i}", "explanation")
+                wandb_logger.log_artifact(plot_path, f"explanation_plot_example_{i}", "explanation")
+                
+                # Log summary statistics
+                explanation_metrics = {
+                    f"explanation/example_{i}/node_feat_importance_mean": float(np.mean(node_feat_mask)),
+                    f"explanation/example_{i}/node_feat_importance_std": float(np.std(node_feat_mask)),
+                    f"explanation/example_{i}/node_feat_importance_max": float(np.max(node_feat_mask)),
+                    f"explanation/example_{i}/edge_importance_mean": float(np.mean(edge_mask)),
+                    f"explanation/example_{i}/edge_importance_std": float(np.std(edge_mask)),
+                    f"explanation/example_{i}/edge_importance_max": float(np.max(edge_mask)),
+                    f"explanation/example_{i}/true_length": float(data.y.item()),
+                }
+                wandb_logger.log_metrics(explanation_metrics, step=i)
+
+        except Exception as e:
+            logger.error(f"Failed to explain example {i}: {e}")
+
 
 def free_gpu_memory():
     """
@@ -90,12 +159,14 @@ class GraphRegressor(nn.Module):
         self.conv2 = GCNConv(hidden_dim, hidden_dim // 2)
         self.linear = nn.Linear(hidden_dim // 2, 1)
 
-    def forward(self, x, edge_index, batch):
+    def forward(self, x, edge_index, batch=None):
         x = F.relu(self.conv1(x, edge_index))
         x = F.dropout(x, p=0.2, training=self.training)
         x = F.relu(self.conv2(x, edge_index))
-        x = global_mean_pool(x, batch)
+        if batch is not None:
+            x = global_mean_pool(x, batch)
         return self.linear(x).squeeze()
+
 
 
 def train(model, loader, optimizer, loss_fn, device, scaler, use_amp=False, max_grad_norm=1.0):
@@ -791,6 +862,28 @@ def evaluate_model(args):
         plot_path = os.path.join(args.output_dir, "mae_vs_distance_from_end.png")
         wandb_logger.log_artifact(plot_path, "mae_vs_distance_plot", "plot")
     
+    # Run explainer if requested (before cleaning up model and dataset)
+    if args.explain:
+        logger.info("🔍 Running GNNExplainer...")
+        try:
+            # Create explanation output directory
+            explanation_dir = os.path.join(args.output_dir, "explanations")
+            os.makedirs(explanation_dir, exist_ok=True)
+            
+            # Run explainer on a subset of test examples
+            num_examples = min(5, len(test_dataset))  # Explain up to 5 examples
+            run_explainer(
+                model, 
+                test_dataset, 
+                device, 
+                explanation_dir, 
+                wandb_logger=wandb_logger if args.use_wandb else None,
+                num_examples=num_examples
+            )
+            logger.info(f"✅ Completed explanations for {num_examples} examples")
+        except Exception as e:
+            logger.error(f"❌ Failed to run explainer: {e}")
+    
     # Finish wandb logging
     if args.use_wandb and wandb_logger:
         wandb_logger.finish()
@@ -867,8 +960,9 @@ def main():
     parser.add_argument("--wandb_group", type=str, default=None,
                         help="Weights & Biases group name for experiment comparison")
     parser.add_argument("--explain", action="store_true",
-                    help="Run GNNExplainer on the trained model")
-    parser.add_argument('--layer_names', nargs='+', default=None, help="List of layer names to use (e.g., layer_8 layer_16). If not specified, all layers will be used.")
+                        help="Run GNNExplainer on the trained model (only works with --do_eval)")
+    parser.add_argument('--layer_names', nargs='+', default=None, 
+                        help="List of layer names to use (e.g., layer_8 layer_16). If not specified, all layers will be used.")
 
     args = parser.parse_args()
     
@@ -877,6 +971,8 @@ def main():
     
     if args.do_eval:
         evaluate_model(args)
+    elif args.explain:
+        logger.warning("⚠️  --explain flag requires --do_eval to be set. Explainer runs during evaluation.")
     
     logger.info("Script execution completed")
 
